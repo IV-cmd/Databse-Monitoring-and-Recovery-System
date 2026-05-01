@@ -1,11 +1,12 @@
 """
-API Router for Version 1
+API Router
 
-This module combines all v1 API routes into a single router.
+This module combines all API routes into a single router.
 """
 
 from fastapi import APIRouter
 from app.api.v1.routes import health, monitoring, recovery, metrics
+
 
 # Create API router
 api_router = APIRouter()
