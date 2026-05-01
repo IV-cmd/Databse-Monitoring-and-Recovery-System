@@ -1,37 +1,41 @@
 """
 Metrics Routes
-
 This module contains all metrics related API endpoints.
 """
-
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
 
-from ...models.schemas import MetricsResponse, MetricsQueryRequest
-from ...services.database_service import DatabaseService
-from ...utils.logger import get_logger
-
+from app.models.schemas import MetricsResponse, MetricsQueryRequest
+from app.services.database_service import DatabaseService
+from app.services.metrics_service import MetricsService
+from app.repositories.metrics_repo import MetricsRepository
+from app.utils.logger import get_logger
+from app.core.config import settings
+import httpx
+import asyncpg
+import psutil
+import random
 
 router = APIRouter()
 logger = get_logger(__name__)
-
 
 async def get_database_service() -> DatabaseService:
     """
     Dependency to get database service instance.
     """
     return DatabaseService(
-        primary_url="postgresql://admin:admin123@postgres-primary:5432/monitoring_db",
-        replica_url="postgresql://admin:admin123@postgres-replica:5432/monitoring_db"
+        primary_url=settings.DATABASE_URL,
+        replica_url=settings.REPLICA_URL
     )
 
-
 @router.get("/current", response_model=MetricsResponse)
-async def get_current_metrics(service: DatabaseService = Depends(get_database_service)):
+async def get_current_metrics(
+    service: DatabaseService = Depends(get_database_service),
+    metrics_service: MetricsService = Depends()
+):
     """
     Get current system metrics.
-    
     Returns:
         Current metrics from all monitoring sources
     """
@@ -40,18 +44,8 @@ async def get_current_metrics(service: DatabaseService = Depends(get_database_se
         status = await service.get_status()
         primary_status = status.get("primary", {})
         
-        # Get system metrics (would use psutil in production)
-        import psutil
-        system_metrics = {
-            "cpu_percent": psutil.cpu_percent(interval=1),
-            "memory_percent": psutil.virtual_memory().percent,
-            "disk_usage": psutil.disk_usage('/').percent,
-            "load_average": list(psutil.getloadavg()),
-            "network_io": {
-                "bytes_sent": psutil.net_io_counters().bytes_sent,
-                "bytes_recv": psutil.net_io_counters().bytes_recv
-            }
-        }
+        # Get system metrics using MetricsService
+        system_metrics = await metrics_service.collect_all_metrics()
         
         # Combine metrics
         current_metrics = {
@@ -60,14 +54,14 @@ async def get_current_metrics(service: DatabaseService = Depends(get_database_se
             "timestamp": datetime.utcnow().isoformat()
         }
         
-        # Define thresholds (would come from settings)
+        # Define thresholds from settings
         thresholds = {
-            "cpu_warning": 80.0,
-            "cpu_critical": 95.0,
-            "memory_warning": 85.0,
-            "memory_critical": 95.0,
-            "disk_warning": 85.0,
-            "disk_critical": 95.0
+            "cpu_warning": settings.CPU_WARNING_THRESHOLD,
+            "cpu_critical": settings.CPU_CRITICAL_THRESHOLD,
+            "memory_warning": settings.MEMORY_WARNING_THRESHOLD,
+            "memory_critical": settings.MEMORY_CRITICAL_THRESHOLD,
+            "disk_warning": settings.DISK_WARNING_THRESHOLD,
+            "disk_critical": settings.DISK_CRITICAL_THRESHOLD
         }
         
         return MetricsResponse(
@@ -76,19 +70,25 @@ async def get_current_metrics(service: DatabaseService = Depends(get_database_se
             thresholds=thresholds
         )
         
+    except asyncpg.PostgresConnectionError as e:
+        logger.error(f"Database connection error in current metrics: {e}")
+        raise HTTPException(status_code=503, detail="Database service unavailable")
+    except psutil.AccessDenied as e:
+        logger.error(f"System access denied in current metrics: {e}")
+        raise HTTPException(status_code=403, detail="Insufficient permissions to access system metrics")
     except Exception as e:
-        logger.error(f"Failed to get current metrics: {e}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve current metrics")
-
+        logger.error(f"Unexpected error in current metrics: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error while retrieving current metrics")
 
 @router.get("/query", response_model=MetricsResponse)
 async def query_metrics(
     request: MetricsQueryRequest = Depends(),
-    service: DatabaseService = Depends(get_database_service)
+    service: DatabaseService = Depends(get_database_service),
+    metrics_service: MetricsService = Depends(),
+    metrics_repo: MetricsRepository = Depends()
 ):
     """
     Query historical metrics with filtering and aggregation.
-    
     Args:
         request: Metrics query parameters
         
@@ -104,26 +104,32 @@ async def query_metrics(
         end_time = request.end_time or datetime.utcnow()
         start_time = request.start_time or (end_time - timedelta(hours=24))
         
-        # In production, this would query actual metrics storage
-        # For now, return sample data
-        historical_data = []
-        current_time = start_time
-        while current_time < end_time:
-            # Generate sample metrics
-            import psutil
-            sample_metrics = {
-                "timestamp": current_time.isoformat(),
-                "cpu_percent": psutil.cpu_percent(interval=1),
-                "memory_percent": psutil.virtual_memory().percent,
-                "disk_usage": psutil.disk_usage('/').percent,
-                "connections": {
-                    "active": 10,
-                    "idle": 5,
-                    "total": 15
-                }
-            }
-            historical_data.append(sample_metrics)
-            current_time += timedelta(minutes=5)  # 5-minute intervals
+        # Query actual metrics storage using MetricsService and MetricsRepository
+        try:
+            # Get historical metrics from repository
+            historical_data = await metrics_repo.get_metrics_history(
+                start_time=start_time,
+                end_time=end_time,
+                metric_types=request.metric_types or ["cpu", "memory", "disk", "network"]
+            )
+            
+            # If no data found, collect current metrics as fallback
+            if not historical_data:
+                logger.warning(f"No historical data found for time range {start_time} to {end_time}")
+                # Get current metrics using MetricsService
+                current_metrics_data = await metrics_service.collect_all_metrics()
+                historical_data = [{
+                    "timestamp": datetime.utcnow().isoformat(),
+                    **current_metrics_data
+                }]
+        except Exception as e:
+            logger.error(f"Failed to query metrics repository: {e}")
+            # Fallback to current metrics if repository fails
+            current_metrics_data = await metrics_service.collect_all_metrics()
+            historical_data = [{
+                "timestamp": datetime.utcnow().isoformat(),
+                **current_metrics_data
+            }]
         
         # Apply aggregation if specified
         if request.aggregation == "avg":
@@ -154,10 +160,18 @@ async def query_metrics(
         
     except HTTPException:
         raise
+    except ValueError as e:
+        logger.error(f"Invalid query parameters in metrics query: {e}")
+        raise HTTPException(status_code=400, detail="Invalid query parameters")
+    except asyncpg.PostgresConnectionError as e:
+        logger.error(f"Database connection error in metrics query: {e}")
+        raise HTTPException(status_code=503, detail="Database service unavailable")
+    except psutil.AccessDenied as e:
+        logger.error(f"System access denied in metrics query: {e}")
+        raise HTTPException(status_code=403, detail="Insufficient permissions to access system metrics")
     except Exception as e:
-        logger.error(f"Failed to query metrics: {e}")
-        raise HTTPException(status_code=500, detail="Failed to query metrics")
-
+        logger.error(f"Unexpected error in metrics query: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error while querying metrics")
 
 @router.get("/database")
 async def get_database_metrics(service: DatabaseService = Depends(get_database_service)):
@@ -182,10 +196,12 @@ async def get_database_metrics(service: DatabaseService = Depends(get_database_s
         
         return db_metrics
         
+    except asyncpg.PostgresConnectionError as e:
+        logger.error(f"Database connection error in database metrics: {e}")
+        raise HTTPException(status_code=503, detail="Database service unavailable")
     except Exception as e:
-        logger.error(f"Failed to get database metrics: {e}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve database metrics")
-
+        logger.error(f"Unexpected error in database metrics: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error while retrieving database metrics")
 
 @router.get("/system")
 async def get_system_metrics():
@@ -196,7 +212,6 @@ async def get_system_metrics():
         System performance metrics
     """
     try:
-        import psutil
         
         # CPU metrics
         cpu_metrics = {
@@ -241,21 +256,24 @@ async def get_system_metrics():
             "network": network_metrics
         }
         
+    except psutil.AccessDenied as e:
+        logger.error(f"System access denied in system metrics: {e}")
+        raise HTTPException(status_code=403, detail="Insufficient permissions to access system metrics")
+    except FileNotFoundError as e:
+        logger.error(f"System resource not found in system metrics: {e}")
+        raise HTTPException(status_code=404, detail="System resource not available")
     except Exception as e:
-        logger.error(f"Failed to get system metrics: {e}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve system metrics")
-
+        logger.error(f"Unexpected error in system metrics: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error while retrieving system metrics")
 
 @router.get("/prometheus")
 async def get_prometheus_metrics():
     """
     Get metrics in Prometheus format.
-    
     Returns:
         Metrics formatted for Prometheus scraping
     """
     try:
-        import psutil
         
         # Generate Prometheus metrics
         metrics = []
@@ -280,6 +298,9 @@ async def get_prometheus_metrics():
             media_type="text/plain"
         )
         
+    except psutil.AccessDenied as e:
+        logger.error(f"System access denied in Prometheus metrics: {e}")
+        raise HTTPException(status_code=403, detail="Insufficient permissions to access system metrics")
     except Exception as e:
-        logger.error(f"Failed to get Prometheus metrics: {e}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve Prometheus metrics")
+        logger.error(f"Unexpected error in Prometheus metrics: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error while retrieving Prometheus metrics")
