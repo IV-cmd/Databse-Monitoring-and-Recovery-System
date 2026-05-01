@@ -1,9 +1,7 @@
 """
 Recovery Routes
-
 This module contains all recovery related API endpoints.
 """
-
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Header
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
@@ -11,12 +9,7 @@ import uuid
 import asyncio
 import asyncpg
 
-from app.models.schemas import (
-    RecoveryRequest, 
-    RecoveryResponse, 
-    RecoveryHistoryResponse,
-    RecoveryStatusEnum
-)
+from app.models.schemas import (RecoveryRequest, RecoveryResponse, RecoveryHistoryResponse, RecoveryStatusEnum)
 from app.services.database_service import DatabaseService
 from app.services.recovery_service import RecoveryService
 from app.repositories.recovery_repo import RecoveryRepository
@@ -24,10 +17,8 @@ from app.utils.logger import get_logger
 from app.core.config import settings
 from prometheus_client import Counter, Histogram, Gauge
 
-
 router = APIRouter()
 logger = get_logger(__name__)
-
 
 # Prometheus metrics for recovery operations
 RECOVERY_REQUESTS_TOTAL = Counter(
@@ -52,11 +43,9 @@ RECOVERY_SUCCESS_RATE = Gauge(
     'Success rate of recovery operations'
 )
 
-
 # Global recovery repository and service instances
-recovery_repo = RecoveryRepository()
+recovery_repo = RecoveryRepository(settings.DATABASE_URL)
 recovery_service = RecoveryService(recovery_repo)
-
 
 async def get_database_service() -> DatabaseService:
     """
@@ -66,7 +55,6 @@ async def get_database_service() -> DatabaseService:
         primary_url=settings.DATABASE_URL,
         replica_url=settings.REPLICA_URL
     )
-
 
 async def verify_recovery_auth(authorization: Optional[str] = Header(None)) -> bool:
     """
@@ -93,9 +81,6 @@ async def verify_recovery_auth(authorization: Optional[str] = Header(None)) -> b
         detail="Invalid recovery authentication token",
         headers={"WWW-Authenticate": "Bearer"}
     )
-
-
-
 
 @router.post("/start", response_model=RecoveryResponse)
 async def start_recovery(
@@ -167,7 +152,6 @@ async def start_recovery(
             logger.error(f"Failed to start recovery: {e}")
             RECOVERY_REQUESTS_TOTAL.labels(type=request.type, severity=request.severity, status="error").inc()
             raise HTTPException(status_code=500, detail="Internal server error while starting recovery")
-
 
 async def perform_recovery(
     recovery_id: str,
@@ -267,7 +251,6 @@ async def perform_recovery(
         active_count = await recovery_repo.get_active_recoveries_count()
         ACTIVE_RECOVERIES.set(active_count)
 
-
 async def update_success_rate():
     """
     Update the recovery success rate gauge.
@@ -281,7 +264,6 @@ async def update_success_rate():
             RECOVERY_SUCCESS_RATE.set(0.0)
     except Exception as e:
         logger.error(f"Failed to update success rate: {e}")
-
 
 @router.get("/status/{recovery_id}")
 async def get_recovery_status(
@@ -314,7 +296,6 @@ async def get_recovery_status(
     except Exception as e:
         logger.error(f"Failed to get recovery status: {e}")
         raise HTTPException(status_code=500, detail="Internal server error while retrieving recovery status")
-
 
 @router.get("/history", response_model=RecoveryHistoryResponse)
 async def get_recovery_history(
@@ -372,7 +353,6 @@ async def get_recovery_history(
     except Exception as e:
         logger.error(f"Failed to get recovery history: {e}")
         raise HTTPException(status_code=500, detail="Internal server error while retrieving recovery history")
-
 
 @router.post("/cancel/{recovery_id}")
 async def cancel_recovery(
