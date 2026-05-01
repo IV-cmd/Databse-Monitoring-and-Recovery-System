@@ -59,7 +59,6 @@ MONITORING_STATUS = Gauge(
     'Monitoring system status (1=healthy, 0=degraded)'
 )
 
-
 # Prometheus client configuration
 class PrometheusClient:
     def __init__(self):
@@ -132,10 +131,8 @@ class PrometheusClient:
                 logger.error(f"Prometheus connection error: {e}")
                 raise HTTPException(status_code=503, detail="Failed to connect to Prometheus")
 
-
 # Global Prometheus client instance
 prometheus_client = PrometheusClient()
-
 
 async def verify_prometheus_auth(authorization: Optional[str] = Header(None)) -> bool:
     """Verify Prometheus authentication token."""
@@ -184,7 +181,7 @@ async def get_monitoring_status(
             
             # Determine overall health
             is_healthy = primary_status.get("status") == "healthy"
-            monitoring_status = "running" if is_healthy else "degraded"
+            monitoring_status = "healthy" if is_healthy else "degraded"
             
             # Update Prometheus metrics
             MONITORING_STATUS.set(1 if is_healthy else 0)
