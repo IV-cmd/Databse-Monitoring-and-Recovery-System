@@ -1,0 +1,172 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Primary
+  postgres-primary:
+    image: postgres:15
+    container_name: postgres-primary
+    environment:
+      POSTGRES_DB: monitoring_db
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin123
+      POSTGRES_REPLICATION_USER: replicator
+      POSTGRES_REPLICATION_PASSWORD: repl123
+    volumes:
+      - ./docker/postgres/primary/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./docker/postgres/primary/postgresql.conf:/etc/postgresql/postgresql.conf
+      - ./docker/postgres/primary/pg_hba.conf:/etc/postgresql/pg_hba.conf
+      - postgres_primary_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - monitoring
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d monitoring_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # PostgreSQL Replica
+  postgres-replica:
+    image: postgres:15
+    container_name: postgres-replica
+    environment:
+      POSTGRES_DB: monitoring_db
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin123
+      PGUSER: postgres
+    volumes:
+      - ./docker/postgres/replica/setup-replica.sh:/docker-entrypoint-initdb.d/setup-replica.sh
+      - postgres_replica_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    networks:
+      - monitoring
+    depends_on:
+      - postgres-primary
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d monitoring_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # PostgreSQL Exporter
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    container_name: postgres-exporter
+    environment:
+      DATA_SOURCE_NAME: postgresql://admin:admin123@postgres-primary:5432/monitoring_db?sslmode=disable
+    ports:
+      - "9187:9187"
+    networks:
+      - monitoring
+    depends_on:
+      - postgres-primary
+
+  # Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - monitoring
+    depends_on:
+      - postgres-exporter
+
+  # Grafana
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin123
+      GF_USERS_ALLOW_SIGN_UP: false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./config/grafana/provisioning:/etc/grafana/provisioning
+      - ./config/grafana/dashboards:/var/lib/grafana/dashboards
+    ports:
+      - "3000:3000"
+    networks:
+      - monitoring
+    depends_on:
+      - prometheus
+
+  # AlertManager
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+    volumes:
+      - ./config/prometheus/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+      - alertmanager_data:/alertmanager
+    ports:
+      - "9093:9093"
+    networks:
+      - monitoring
+    depends_on:
+      - prometheus
+
+  # FastAPI Monitor Service
+  monitor-service:
+    build:
+      context: ./src/backend
+      dockerfile: Dockerfile
+    container_name: monitor-service
+    environment:
+      - DATABASE_URL=postgresql://admin:admin123@postgres-primary:5432/monitoring_db
+      - REPLICA_URL=postgresql://admin:admin123@postgres-replica:5432/monitoring_db
+      - PROMETHEUS_URL=http://prometheus:9090
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
+      - LOG_LEVEL=INFO
+    ports:
+      - "8000:8000"
+    networks:
+      - monitoring
+    depends_on:
+      - postgres-primary
+      - postgres-replica
+      - prometheus
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # React Frontend
+  frontend:
+    build:
+      context: ./src/frontend
+      dockerfile: Dockerfile
+    container_name: frontend
+    ports:
+      - "8080:8080"
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+    networks:
+      - monitoring
+    depends_on:
+      - monitor-service
+
+volumes:
+  postgres_primary_data:
+  postgres_replica_data:
+  prometheus_data:
+  grafana_data:
+  alertmanager_data:
+
+networks:
+  monitoring:
+    driver: bridge
