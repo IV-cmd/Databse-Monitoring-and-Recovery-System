@@ -210,7 +210,7 @@ class Settings(BaseSettings):
         description="Bearer token for recovery operations"
     )
     
-    # Alert Configuration (removed Slack for development)
+    # Alert Configuration
     ALERT_COOLDOWN: int = Field(
         default=300,
         ge=60,
@@ -311,6 +311,13 @@ class Settings(BaseSettings):
         description="Replication lag threshold in seconds"
     )
     
+    DATABASE_SIZE_THRESHOLD_GB: float = Field(
+        default=10.0,
+        ge=1.0,
+        le=1000.0,
+        description="Database size threshold in GB"
+    )
+    
     # Metrics Collection Configuration
     METRICS_COLLECTION_INTERVAL: int = Field(
         default=5,
@@ -403,11 +410,6 @@ class Settings(BaseSettings):
     def recovery_bearer_token(self) -> Optional[str]:
         """Get recovery bearer token as string."""
         return self.RECOVERY_BEARER_TOKEN.get_secret_value() if self.RECOVERY_BEARER_TOKEN else None
-    
-    @property
-    def slack_webhook_url(self) -> Optional[str]:
-        """Get Slack webhook URL as string."""
-        return self.SLACK_WEBHOOK_URL.get_secret_value() if self.SLACK_WEBHOOK_URL else None
     
     @property
     def grafana_api_key(self) -> Optional[str]:
