@@ -207,24 +207,3 @@ async def get_system_metrics(metrics_service: MetricsService = Depends(get_metri
         logger.error(f"Unexpected error in system metrics: {e}")
         raise HTTPException(status_code=500, detail="Internal server error while retrieving system metrics")
 
-@router.get("/prometheus")
-async def get_prometheus_metrics(metrics_service: MetricsService = Depends(get_metrics_service)):
-    """
-    Get metrics in Prometheus format.
-    Returns:
-        Metrics formatted for Prometheus scraping
-    """
-    try:
-        prometheus_data = await metrics_service.get_prometheus_metrics()
-        
-        return Response(
-            content=prometheus_data,
-            media_type="text/plain"
-        )
-        
-    except psutil.AccessDenied as e:
-        logger.error(f"System access denied in Prometheus metrics: {e}")
-        raise HTTPException(status_code=403, detail="Insufficient permissions to access system metrics")
-    except Exception as e:
-        logger.error(f"Unexpected error in Prometheus metrics: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error while retrieving Prometheus metrics")
