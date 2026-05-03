@@ -6,9 +6,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
 
+from app.dependencies import get_database_service
 from app.models.schemas import MetricsResponse, MetricsQueryRequest
-from app.services.database_service import DatabaseService
 from app.services.metrics_service import MetricsService
+from app.services.database_service import DatabaseService
 from app.repositories.metrics_repo import MetricsRepository
 from app.utils.logger import get_logger
 from app.core.config import settings
@@ -19,15 +20,6 @@ import random
 
 router = APIRouter()
 logger = get_logger(__name__)
-
-async def get_database_service() -> DatabaseService:
-    """
-    Dependency to get database service instance.
-    """
-    return DatabaseService(
-        primary_url=settings.DATABASE_URL,
-        replica_url=settings.REPLICA_URL
-    )
 
 @router.get("/current", response_model=MetricsResponse)
 async def get_current_metrics(
