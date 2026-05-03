@@ -1,7 +1,6 @@
 """
-Simple Database Management
-
-Clean, simple database connection manager for the CERN Database Monitoring System.
+Simple Database Connection Manager
+Clean, production-grade database connections for monitoring system.
 """
 
 import asyncpg
@@ -17,7 +16,6 @@ logger = logging.getLogger(__name__)
 # Global database manager instance
 db_manager: Optional['DatabaseManager'] = None
 
-
 async def get_database() -> 'DatabaseManager':
     """Get the global database manager instance."""
     global db_manager
@@ -25,7 +23,6 @@ async def get_database() -> 'DatabaseManager':
         db_manager = DatabaseManager()
         await db_manager.initialize()
     return db_manager
-
 
 class DatabaseManager:
     """Simple database connection manager."""
@@ -45,26 +42,17 @@ class DatabaseManager:
             if settings.DB_SSL_VERIFY == "disable":
                 ssl_context.check_hostname = False
                 ssl_context.verify_mode = ssl.CERT_NONE
-            elif settings.DB_SSL_VERIFY == "prefer":
-                ssl_context.check_hostname = False
-                ssl_context.verify_mode = ssl.CERT_OPTIONAL
             elif settings.DB_SSL_VERIFY == "require":
                 ssl_context.check_hostname = True
                 ssl_context.verify_mode = ssl.CERT_REQUIRED
             
-            # Load custom certificates if provided
             if settings.DB_SSL_CERT_FILE:
-                ssl_context.load_cert_chain(
-                    settings.DB_SSL_CERT_FILE,
-                    settings.DB_SSL_KEY_FILE
-                )
+                ssl_context.load_cert_chain(settings.DB_SSL_CERT_FILE)
             
             if settings.DB_SSL_CA_FILE:
                 ssl_context.load_verify_locations(settings.DB_SSL_CA_FILE)
             
-            logger.info("SSL context created successfully")
             return ssl_context
-            
         except Exception as e:
             logger.error(f"Failed to create SSL context: {e}")
             return None
@@ -85,18 +73,20 @@ class DatabaseManager:
             
             # Initialize replica connection pool if configured
             if settings.replica_url:
-                self.replica_pool = await asyncpg.create_pool(
-                    settings.replica_url,
-                    min_size=settings.DB_MIN_CONNECTIONS,
-                    max_size=settings.DB_MAX_CONNECTIONS,
-                    command_timeout=settings.DB_COMMAND_TIMEOUT,
-                    ssl=ssl_context
-                )
-                logger.info("Replica connection pool initialized")
-            else:
-                logger.info("No replica configured, using primary for all operations")
+                try:
+                    self.replica_pool = await asyncpg.create_pool(
+                        settings.replica_url,
+                        min_size=settings.DB_MIN_CONNECTIONS,
+                        max_size=settings.DB_MAX_CONNECTIONS,
+                        command_timeout=settings.DB_COMMAND_TIMEOUT,
+                        ssl=ssl_context
+                    )
+                    logger.info("Replica connection pool initialized")
+                except Exception as e:
+                    logger.warning(f"Failed to initialize replica pool: {e}")
+                    self.replica_pool = None
             
-            logger.info("Database connection pools initialized successfully")
+            logger.info("Database connection pools initialized")
             
         except Exception as e:
             logger.error(f"Failed to initialize database pools: {e}")
@@ -128,13 +118,16 @@ class DatabaseManager:
             return await conn.fetch(query, *args)
     
     async def fetch_replica(self, query: str, *args) -> List[asyncpg.Record]:
-        """Fetch results from replica database."""
+        """Fetch results from replica database with fallback to primary."""
         if self.replica_pool:
-            async with self.replica_pool.acquire() as conn:
-                return await conn.fetch(query, *args)
-        else:
-            # Fallback to primary
-            return await self.fetch_primary(query, *args)
+            try:
+                async with self.replica_pool.acquire() as conn:
+                    return await conn.fetch(query, *args)
+            except Exception as e:
+                logger.warning(f"Replica query failed, falling back to primary: {e}")
+        
+        # Fallback to primary
+        return await self.fetch_primary(query, *args)
     
     async def check_connection(self, is_primary: bool = True) -> bool:
         """Check database connection health."""
@@ -149,7 +142,7 @@ class DatabaseManager:
             return False
     
     async def get_database_stats(self) -> Dict[str, Any]:
-        """Get database statistics."""
+        """Get basic database statistics."""
         try:
             # Get connection stats
             connections = await self.fetch_primary("""
@@ -163,35 +156,12 @@ class DatabaseManager:
                 SELECT pg_database_size(current_database()) as size_bytes
             """)
             
-            # Get replication lag (if replica is available)
-            replication_lag = 0
-            if self.replica_pool:
-                try:
-                    lag_result = await self.fetch_replica("""
-                        SELECT EXTRACT(EPOCH FROM (now() - pg_last_xact_replay_timestamp())) as lag
-                    """)
-                    replication_lag = lag_result[0]['lag'] if lag_result else 0
-                except:
-                    pass  # Replica might not be available
-            
             return {
                 "active_connections": connections[0]['active_connections'],
                 "database_size_bytes": size[0]['size_bytes'],
-                "replication_lag_seconds": replication_lag,
                 "timestamp": datetime.utcnow().isoformat()
             }
             
         except Exception as e:
             logger.error(f"Failed to get database stats: {e}")
             return {}
-    
-    async def restart_database(self, is_primary: bool = True) -> bool:
-        """Attempt to restart database (simulated)."""
-        logger.info(f"Restart request for {'primary' if is_primary else 'replica'} database")
-        
-        # Simulate restart delay
-        import asyncio
-        await asyncio.sleep(5)
-        
-        # Check if database is back online
-        return await self.check_connection(is_primary)
