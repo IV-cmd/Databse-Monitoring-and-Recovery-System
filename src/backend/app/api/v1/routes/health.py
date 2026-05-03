@@ -4,6 +4,7 @@ import ssl
 from contextlib import asynccontextmanager
 
 from app.models.schemas import HealthResponse, DetailedHealthResponse
+from app.dependencies import get_database_service
 from app.services.database_service import DatabaseService
 from app.utils.logger import get_logger
 from app.core.config import settings
@@ -13,7 +14,6 @@ import psutil
 
 router = APIRouter()
 logger = get_logger(__name__)
-
 
 # PostgreSQL authentication configuration
 class PostgreSQLAuthConfig:
@@ -67,10 +67,8 @@ class PostgreSQLAuthConfig:
         
         return params, url
 
-
 # Global authentication configuration
 auth_config = PostgreSQLAuthConfig()
-
 
 @asynccontextmanager
 async def get_authenticated_connection(is_replica: bool = False):
@@ -93,16 +91,6 @@ async def get_authenticated_connection(is_replica: bool = False):
     finally:
         if conn:
             await conn.close()
-
-
-async def get_database_service() -> DatabaseService:
-    """
-    Dependency to get database service instance.
-    """
-    return DatabaseService(
-        primary_url=settings.DATABASE_URL,
-        replica_url=settings.REPLICA_URL
-    )
 
 @router.get("/", response_model=HealthResponse)
 async def health_check(service: DatabaseService = Depends(get_database_service)):
