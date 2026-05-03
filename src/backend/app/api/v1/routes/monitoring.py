@@ -8,7 +8,7 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
 import httpx
 import base64
-
+from app.dependencies import get_database_service, get_metrics_service
 from app.models.schemas import MonitoringStatusResponse, MonitoringMetricsResponse
 from app.services.database_service import DatabaseService
 from app.services.metrics_service import MetricsService
@@ -22,14 +22,20 @@ from prometheus_client import Counter, Histogram, Gauge, generate_latest
 router = APIRouter()
 logger = get_logger(__name__)
 
-async def get_database_service() -> DatabaseService:
-    """
-    Dependency to get database service instance.
-    """
-    return DatabaseService(
-        primary_url=settings.DATABASE_URL,
-        replica_url=settings.REPLICA_URL
-    )
+def handle_database_errors(func_name: str, error: Exception):
+    """Handle common database errors with consistent logging and HTTP responses."""
+    if isinstance(error, asyncpg.PostgresConnectionError):
+        logger.error(f"Database connection error in {func_name}: {error}")
+        raise HTTPException(status_code=503, detail="Database service unavailable")
+    elif isinstance(error, ValueError):
+        logger.error(f"Invalid parameters in {func_name}: {error}")
+        raise HTTPException(status_code=400, detail="Invalid query parameters")
+    elif isinstance(error, httpx.RequestError):
+        logger.error(f"Prometheus connection error in {func_name}: {error}")
+        raise HTTPException(status_code=503, detail="Failed to connect to Prometheus")
+    else:
+        logger.error(f"Unexpected error in {func_name}: {error}")
+        raise HTTPException(status_code=500, detail=f"Internal server error in {func_name}")
 
 # Prometheus metrics definitions
 MONITORING_REQUESTS_TOTAL = Counter(
@@ -57,6 +63,32 @@ SLOW_QUERIES_COUNT = Gauge(
 MONITORING_STATUS = Gauge(
     'monitoring_status',
     'Monitoring system status (1=healthy, 0=degraded)'
+)
+
+# System metrics
+SYSTEM_CPU_PERCENT = Gauge(
+    'system_cpu_percent',
+    'Current CPU usage percentage'
+)
+
+SYSTEM_MEMORY_PERCENT = Gauge(
+    'system_memory_percent',
+    'Current memory usage percentage'
+)
+
+SYSTEM_DISK_PERCENT = Gauge(
+    'system_disk_percent',
+    'Current disk usage percentage'
+)
+
+SYSTEM_NETWORK_BYTES_SENT = Counter(
+    'system_network_bytes_sent_total',
+    'Total network bytes sent'
+)
+
+SYSTEM_NETWORK_BYTES_RECV = Counter(
+    'system_network_bytes_recv_total',
+    'Total network bytes received'
 )
 
 # Prometheus client configuration
@@ -98,13 +130,7 @@ class PrometheusClient:
                 logger.error(f"Prometheus connection error: {e}")
                 raise HTTPException(status_code=503, detail="Failed to connect to Prometheus")
     
-    async def query_range(
-        self, 
-        query: str, 
-        start: datetime, 
-        end: datetime, 
-        step: str = "1m"
-    ) -> Dict[str, Any]:
+    async def query_range(self, query: str, start: datetime, end: datetime, step: str = "1m") -> Dict[str, Any]:
         """Execute PromQL range query against Prometheus."""
         params = {
             "query": query,
@@ -161,7 +187,7 @@ async def verify_prometheus_auth(authorization: Optional[str] = Header(None)) ->
 @router.get("/status", response_model=MonitoringStatusResponse)
 async def get_monitoring_status(
     service: DatabaseService = Depends(get_database_service),
-    metrics_service: MetricsService = Depends()
+    metrics_service: MetricsService = Depends(get_metrics_service)
 ):
     """
     Get current monitoring status.
@@ -211,14 +237,13 @@ async def get_monitoring_status(
             raise HTTPException(status_code=500, detail="Internal server error while retrieving monitoring status")
 
 @router.get("/metrics", response_model=MonitoringMetricsResponse)
-async def get_current_metrics(
+async def get_monitoring_metrics(
     include_slow_queries: bool = Query(False, description="Include slow queries in response"),
     service: DatabaseService = Depends(get_database_service),
-    metrics_service: MetricsService = Depends()
+    metrics_service: MetricsService = Depends(get_metrics_service)
 ):
     """
     Get current monitoring metrics.
-    
     Args:
         include_slow_queries: Whether to include slow queries analysis
         
@@ -280,7 +305,6 @@ async def get_slow_queries(
 ):
     """
     Get slow queries from the database.
-    
     Args:
         limit: Maximum number of queries to return
         threshold_ms: Minimum execution time to consider "slow"
@@ -314,8 +338,7 @@ async def get_slow_queries(
 @router.get("/table-sizes")
 async def get_table_sizes(service: DatabaseService = Depends(get_database_service)):
     """
-    Get table sizes from the database.
-    
+    Get table sizes from the database. 
     Returns:
         List of tables with their sizes
     """
@@ -336,7 +359,6 @@ async def get_table_sizes(service: DatabaseService = Depends(get_database_servic
 async def get_connection_info(service: DatabaseService = Depends(get_database_service)):
     """
     Get database connection information.
-    
     Returns:
         Current connection status and information
     """
@@ -360,14 +382,26 @@ async def get_connection_info(service: DatabaseService = Depends(get_database_se
             raise HTTPException(status_code=500, detail="Internal server error while retrieving connection info")
 
 @router.get("/prometheus")
-async def get_prometheus_metrics():
+async def get_prometheus_metrics(metrics_service: MetricsService = Depends(get_metrics_service)):
     """
-    Get monitoring metrics in Prometheus format.
-    
+    Get all metrics in Prometheus format.
     Returns:
-        Monitoring metrics formatted for Prometheus scraping
+        All metrics (system + application) formatted for Prometheus scraping
     """
     try:
+        # Update system metrics
+        system_metrics = await metrics_service.collect_all_metrics()
+        
+        # Update Prometheus gauges with system metrics
+        SYSTEM_CPU_PERCENT.set(system_metrics.get("cpu", {}).get("percent", 0))
+        SYSTEM_MEMORY_PERCENT.set(system_metrics.get("memory", {}).get("percent", 0))
+        SYSTEM_DISK_PERCENT.set(system_metrics.get("disk", {}).get("percent", 0))
+        
+        # Update network counters (note: these are cumulative, so we'd need to track deltas)
+        network_metrics = system_metrics.get("network", {})
+        SYSTEM_NETWORK_BYTES_SENT._value._value = network_metrics.get("bytes_sent", 0)
+        SYSTEM_NETWORK_BYTES_RECV._value._value = network_metrics.get("bytes_recv", 0)
+        
         # Generate Prometheus metrics
         metrics_data = generate_latest()
         
@@ -379,7 +413,6 @@ async def get_prometheus_metrics():
         logger.error(f"Failed to generate Prometheus metrics: {e}")
         raise HTTPException(status_code=500, detail="Internal server error while generating Prometheus metrics")
 
-
 @router.get("/prometheus/query")
 async def prometheus_query(
     query: str = Query(..., description="PromQL query to execute"),
@@ -388,7 +421,6 @@ async def prometheus_query(
 ):
     """
     Execute PromQL query against Prometheus.
-    
     Args:
         query: PromQL query string
         time: Optional timestamp for query
@@ -422,7 +454,6 @@ async def prometheus_query(
             logger.error(f"Unexpected error in PromQL query: {e}")
             raise HTTPException(status_code=500, detail="Internal server error while executing PromQL query")
 
-
 @router.get("/prometheus/query_range")
 async def prometheus_query_range(
     query: str = Query(..., description="PromQL query to execute"),
@@ -433,7 +464,6 @@ async def prometheus_query_range(
 ):
     """
     Execute PromQL range query against Prometheus.
-    
     Args:
         query: PromQL query string
         start: Start time for range
@@ -479,14 +509,12 @@ async def prometheus_query_range(
             logger.error(f"Unexpected error in PromQL range query: {e}")
             raise HTTPException(status_code=500, detail="Internal server error while executing PromQL range query")
 
-
 @router.get("/prometheus/alerts")
 async def get_prometheus_alerts(
     authenticated: bool = Depends(verify_prometheus_auth)
 ):
     """
     Get current Prometheus alerts.
-    
     Returns:
         Active Prometheus alerts
     """
@@ -529,14 +557,12 @@ async def get_prometheus_alerts(
             logger.error(f"Unexpected error in Prometheus alerts: {e}")
             raise HTTPException(status_code=500, detail="Internal server error while retrieving Prometheus alerts")
 
-
 @router.get("/prometheus/targets")
 async def get_prometheus_targets(
     authenticated: bool = Depends(verify_prometheus_auth)
 ):
     """
     Get Prometheus targets status.
-    
     Returns:
         Prometheus targets and their health status
     """
