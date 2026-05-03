@@ -9,6 +9,7 @@ import uuid
 import asyncio
 import asyncpg
 
+from app.dependencies import get_database_service, get_recovery_service
 from app.models.schemas import (RecoveryRequest, RecoveryResponse, RecoveryHistoryResponse, RecoveryStatusEnum)
 from app.services.database_service import DatabaseService
 from app.services.recovery_service import RecoveryService
@@ -47,14 +48,6 @@ RECOVERY_SUCCESS_RATE = Gauge(
 recovery_repo = RecoveryRepository(settings.DATABASE_URL)
 recovery_service = RecoveryService(recovery_repo)
 
-async def get_database_service() -> DatabaseService:
-    """
-    Dependency to get database service instance.
-    """
-    return DatabaseService(
-        primary_url=settings.DATABASE_URL,
-        replica_url=settings.REPLICA_URL
-    )
 
 async def verify_recovery_auth(authorization: Optional[str] = Header(None)) -> bool:
     """
