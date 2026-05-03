@@ -1,11 +1,11 @@
 """
-This module provides comprehensive configuration management with environment-based
-settings, security, validation, and API alignment for the Database Monitoring System.
+Production-grade configuration management for Database Monitoring System.
+Provides secure, validated, environment-aware settings.
 """
 
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field, validator, SecretStr
-from typing import Optional, List, Union
+from typing import Optional, List
 import os
 import secrets
 from enum import Enum
@@ -59,7 +59,7 @@ class Settings(BaseSettings):
     
     # Database Configuration
     DATABASE_URL: SecretStr = Field(
-        default=SecretStr("postgresql://admin:admin123@localhost:5432/monitoring_db"),
+        default=SecretStr("postgresql://localhost:5432/monitoring_db"),
         description="Primary database connection URL"
     )
     
@@ -155,14 +155,14 @@ class Settings(BaseSettings):
         description="Prometheus request timeout in seconds"
     )
     
-    MONITOR_INTERVAL: int = Field(
+    MONITORING_INTERVAL_SECONDS: int = Field(
         default=30,
         ge=5,
         le=300,
         description="Monitoring interval in seconds"
     )
     
-    HEALTH_CHECK_INTERVAL: int = Field(
+    HEALTH_CHECK_INTERVAL_SECONDS: int = Field(
         default=10,
         ge=1,
         le=60,
@@ -218,20 +218,20 @@ class Settings(BaseSettings):
         description="Alert cooldown period in seconds"
     )
     
-    # API Configuration (simplified for development)
+    # API Configuration
     API_PREFIX: str = Field(
         default="/api/v1",
         description="API URL prefix"
     )
     
     ALLOWED_ORIGINS: List[str] = Field(
-        default=["*"],
-        description="CORS allowed origins (simplified for development)"
+        default_factory=lambda: ["http://localhost:3000", "http://localhost:8000"] if os.getenv("ENVIRONMENT") == "development" else [],
+        description="CORS allowed origins"
     )
     
     ALLOWED_HOSTS: List[str] = Field(
-        default=["*"],
-        description="Allowed hosts for application (simplified for development)"
+        default_factory=lambda: ["localhost", "127.0.0.1"] if os.getenv("ENVIRONMENT") == "development" else [],
+        description="Allowed hosts for application"
     )
     
     RATE_LIMIT_PER_MINUTE: int = Field(
@@ -319,18 +319,11 @@ class Settings(BaseSettings):
     )
     
     # Metrics Collection Configuration
-    METRICS_COLLECTION_INTERVAL: int = Field(
+    METRICS_COLLECTION_INTERVAL_MINUTES: int = Field(
         default=5,
         ge=1,
         le=60,
         description="Metrics collection interval in minutes"
-    )
-    
-    MONITORING_INTERVAL_SECONDS: int = Field(
-        default=30,
-        ge=5,
-        le=300,
-        description="Monitoring interval in seconds"
     )
     
     SLOW_QUERIES_DEFAULT_LIMIT: int = Field(
@@ -348,31 +341,39 @@ class Settings(BaseSettings):
     )
     
     
-    @validator("CPU_CRITICAL_THRESHOLD")
-    def validate_cpu_thresholds(cls, v, values):
+    @field_validator("CPU_CRITICAL_THRESHOLD")
+    @classmethod
+    def validate_cpu_thresholds(cls, v, info):
         """Validate CPU thresholds are logical."""
-        if "CPU_WARNING_THRESHOLD" in values and v <= values["CPU_WARNING_THRESHOLD"]:
+        warning_threshold = info.data.get("CPU_WARNING_THRESHOLD", 0)
+        if v <= warning_threshold:
             raise ValueError("CPU critical threshold must be greater than warning threshold")
         return v
     
-    @validator("MEMORY_CRITICAL_THRESHOLD")
-    def validate_memory_thresholds(cls, v, values):
+    @field_validator("MEMORY_CRITICAL_THRESHOLD")
+    @classmethod
+    def validate_memory_thresholds(cls, v, info):
         """Validate memory thresholds are logical."""
-        if "MEMORY_WARNING_THRESHOLD" in values and v <= values["MEMORY_WARNING_THRESHOLD"]:
+        warning_threshold = info.data.get("MEMORY_WARNING_THRESHOLD", 0)
+        if v <= warning_threshold:
             raise ValueError("Memory critical threshold must be greater than warning threshold")
         return v
     
-    @validator("DISK_CRITICAL_THRESHOLD")
-    def validate_disk_thresholds(cls, v, values):
+    @field_validator("DISK_CRITICAL_THRESHOLD")
+    @classmethod
+    def validate_disk_thresholds(cls, v, info):
         """Validate disk thresholds are logical."""
-        if "DISK_WARNING_THRESHOLD" in values and v <= values["DISK_WARNING_THRESHOLD"]:
+        warning_threshold = info.data.get("DISK_WARNING_THRESHOLD", 0)
+        if v <= warning_threshold:
             raise ValueError("Disk critical threshold must be greater than warning threshold")
         return v
     
-    @validator("DB_MAX_CONNECTIONS")
-    def validate_db_connections(cls, v, values):
+    @field_validator("DB_MAX_CONNECTIONS")
+    @classmethod
+    def validate_db_connections(cls, v, info):
         """Validate database connection pool sizes."""
-        if "DB_MIN_CONNECTIONS" in values and v < values["DB_MIN_CONNECTIONS"]:
+        min_connections = info.data.get("DB_MIN_CONNECTIONS", 1)
+        if v < min_connections:
             raise ValueError("Max connections must be greater than or equal to min connections")
         return v
     
@@ -416,13 +417,33 @@ class Settings(BaseSettings):
         """Get Grafana API key as string."""
         return self.GRAFANA_API_KEY.get_secret_value() if self.GRAFANA_API_KEY else None
     
+    @field_validator("ENVIRONMENT")
+    @classmethod
+    def validate_environment(cls, v):
+        """Validate environment is supported."""
+        if v not in Environment:
+            raise ValueError(f"Environment must be one of: {[e.value for e in Environment]}")
+        return v
+    
+    def get_database_url_with_auth(self, username: str = None, password: str = None) -> str:
+        """Get database URL with optional authentication override."""
+        url = self.database_url
+        if username and password:
+            # Replace authentication in URL
+            import re
+            pattern = r"postgresql://[^@]*@"
+            replacement = f"postgresql://{username}:{password}@"
+            url = re.sub(pattern, replacement, url)
+        return url
+    
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=True,
         validate_assignment=True,
         extra="forbid",
-        env_prefix="DB_MONITOR_"
+        env_prefix="DB_MONITOR_",
+        env_nested_delimiter="__"
     )
 
 # Create global settings instance
