@@ -1,392 +1,56 @@
 """
-Production-grade configuration management for Database Monitoring System.
-Provides secure, validated, environment-aware settings.
+Simple configuration management for Database Monitoring System.
+Clean, production-grade settings without overkill.
 """
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import Optional, List
-import os
+from typing import Optional
 import secrets
 from enum import Enum
 
 
 class Environment(str, Enum):
-    """Environment enumeration for configuration management."""
+    """Environment enumeration."""
     DEVELOPMENT = "development"
     TESTING = "testing"
-    STAGING = "staging"
     PRODUCTION = "production"
 
 
-class LogLevel(str, Enum):
-    """Log level enumeration."""
-    DEBUG = "DEBUG"
-    INFO = "INFO"
-    WARNING = "WARNING"
-    ERROR = "ERROR"
-    CRITICAL = "CRITICAL"
-
-
 class Settings(BaseSettings):
-
-    # Environment and Core Settings
-    ENVIRONMENT: Environment = Field(
-        default=Environment.DEVELOPMENT,
-        description="Application environment (development, testing, staging, production)"
-    )
+    """Simple settings configuration."""
     
-    DEBUG: bool = Field(
-        default=False,
-        description="Enable debug mode"
-    )
-    
-    LOG_LEVEL: LogLevel = Field(
-        default=LogLevel.INFO,
-        description="Application log level"
-    )
-    
-    # Security Settings
-    SECRET_KEY: str = Field(
-        default_factory=lambda: secrets.token_urlsafe(32),
-        description="Secret key for security operations"
-    )
-    
-    API_KEY: Optional[SecretStr] = Field(
-        default=None,
-        description="API key for external service authentication"
-    )
+    # Core Settings
+    ENVIRONMENT: Environment = Field(default=Environment.DEVELOPMENT)
+    DEBUG: bool = Field(default=False)
+    SECRET_KEY: str = Field(default_factory=lambda: secrets.token_urlsafe(32))
     
     # Database Configuration
-    DATABASE_URL: SecretStr = Field(
-        default=SecretStr("postgresql://localhost:5432/monitoring_db"),
-        description="Primary database connection URL"
-    )
+    DATABASE_URL: SecretStr = Field(default=SecretStr("postgresql://localhost:5432/monitoring_db"))
+    REPLICA_URL: Optional[SecretStr] = Field(default=None)
     
-    REPLICA_URL: Optional[SecretStr] = Field(
-        default=None,
-        description="Replica database connection URL"
-    )
+    # Database Connection Settings
+    DB_SSL_ENABLED: bool = Field(default=False)
+    DB_SSL_CERT_FILE: Optional[str] = Field(default=None)
+    DB_SSL_KEY_FILE: Optional[str] = Field(default=None)
+    DB_SSL_CA_FILE: Optional[str] = Field(default=None)
+    DB_SSL_VERIFY: str = Field(default="disable")
     
-    # Database Connection Pool Settings
-    DB_SSL_ENABLED: bool = Field(
-        default=False,
-        description="Enable SSL for database connections"
-    )
-    
-    DB_SSL_CERT_FILE: Optional[str] = Field(
-        default=None,
-        description="Path to SSL certificate file"
-    )
-    
-    DB_SSL_KEY_FILE: Optional[str] = Field(
-        default=None,
-        description="Path to SSL key file"
-    )
-    
-    DB_SSL_CA_FILE: Optional[str] = Field(
-        default=None,
-        description="Path to SSL CA file"
-    )
-    
-    DB_SSL_VERIFY: str = Field(
-        default="disable",
-        description="SSL verification mode (disable/prefer/require)"
-    )
-    
-    DB_CONNECTION_TIMEOUT: float = Field(
-        default=30.0,
-        ge=1.0,
-        le=300.0,
-        description="Database connection timeout in seconds"
-    )
-    
-    DB_COMMAND_TIMEOUT: float = Field(
-        default=60.0,
-        ge=1.0,
-        le=600.0,
-        description="Database command timeout in seconds"
-    )
-    
-    DB_MAX_CONNECTIONS: int = Field(
-        default=100,
-        ge=1,
-        le=1000,
-        description="Maximum database connections"
-    )
-    
-    DB_MIN_CONNECTIONS: int = Field(
-        default=10,
-        ge=1,
-        le=100,
-        description="Minimum database connections"
-    )
+    DB_COMMAND_TIMEOUT: float = Field(default=60.0)
+    DB_MAX_CONNECTIONS: int = Field(default=100)
+    DB_MIN_CONNECTIONS: int = Field(default=10)
     
     # Monitoring Configuration
-    PROMETHEUS_URL: str = Field(
-        default="http://localhost:9090",
-        description="Prometheus server URL"
-    )
+    MONITORING_INTERVAL_SECONDS: int = Field(default=30)
+    AUTO_RECOVERY_ENABLED: bool = Field(default=True)
+    MAX_RECOVERY_ATTEMPTS: int = Field(default=3)
     
-    PROMETHEUS_USERNAME: Optional[str] = Field(
-        default=None,
-        description="Prometheus authentication username"
-    )
+    # Thresholds
+    MAX_CONNECTIONS: int = Field(default=100)
+    REPLICATION_LAG_THRESHOLD: float = Field(default=10.0)
+    DATABASE_SIZE_THRESHOLD_GB: float = Field(default=10.0)
     
-    PROMETHEUS_PASSWORD: Optional[SecretStr] = Field(
-        default=None,
-        description="Prometheus authentication password"
-    )
-    
-    PROMETHEUS_AUTH_REQUIRED: bool = Field(
-        default=False,
-        description="Require Prometheus authentication"
-    )
-    
-    PROMETHEUS_BEARER_TOKEN: Optional[SecretStr] = Field(
-        default=None,
-        description="Prometheus bearer token for authentication"
-    )
-    
-    PROMETHEUS_TIMEOUT: float = Field(
-        default=30.0,
-        ge=1.0,
-        le=300.0,
-        description="Prometheus request timeout in seconds"
-    )
-    
-    MONITORING_INTERVAL_SECONDS: int = Field(
-        default=30,
-        ge=5,
-        le=300,
-        description="Monitoring interval in seconds"
-    )
-    
-    HEALTH_CHECK_INTERVAL_SECONDS: int = Field(
-        default=10,
-        ge=1,
-        le=60,
-        description="Health check interval in seconds"
-    )
-    
-    # Grafana Configuration
-    GRAFANA_URL: str = Field(
-        default="http://localhost:3000",
-        description="Grafana server URL"
-    )
-    
-    GRAFANA_API_KEY: Optional[SecretStr] = Field(
-        default=None,
-        description="Grafana API key"
-    )
-    
-    # Recovery Configuration
-    AUTO_RECOVERY_ENABLED: bool = Field(
-        default=True,
-        description="Enable automatic recovery operations"
-    )
-    
-    MAX_RECOVERY_ATTEMPTS: int = Field(
-        default=3,
-        ge=1,
-        le=10,
-        description="Maximum recovery attempts"
-    )
-    
-    RECOVERY_TIMEOUT: int = Field(
-        default=300,
-        ge=60,
-        le=3600,
-        description="Recovery operation timeout in seconds"
-    )
-    
-    RECOVERY_AUTH_REQUIRED: bool = Field(
-        default=False,
-        description="Require authentication for recovery operations"
-    )
-    
-    RECOVERY_BEARER_TOKEN: Optional[SecretStr] = Field(
-        default=None,
-        description="Bearer token for recovery operations"
-    )
-    
-    # Alert Configuration
-    ALERT_COOLDOWN: int = Field(
-        default=300,
-        ge=60,
-        le=3600,
-        description="Alert cooldown period in seconds"
-    )
-    
-    # API Configuration
-    API_PREFIX: str = Field(
-        default="/api/v1",
-        description="API URL prefix"
-    )
-    
-    ALLOWED_ORIGINS: List[str] = Field(
-        default_factory=lambda: ["http://localhost:3000", "http://localhost:8000"] if os.getenv("ENVIRONMENT") == "development" else [],
-        description="CORS allowed origins"
-    )
-    
-    ALLOWED_HOSTS: List[str] = Field(
-        default_factory=lambda: ["localhost", "127.0.0.1"] if os.getenv("ENVIRONMENT") == "development" else [],
-        description="Allowed hosts for application"
-    )
-    
-    RATE_LIMIT_PER_MINUTE: int = Field(
-        default=100,
-        ge=1,
-        le=10000,
-        description="Rate limit requests per minute"
-    )
-    
-    LOG_REQUEST_BODY: bool = Field(
-        default=False,
-        description="Enable request body logging"
-    )
-    
-    # Monitoring Thresholds
-    CPU_WARNING_THRESHOLD: float = Field(
-        default=80.0,
-        ge=0.0,
-        le=100.0,
-        description="CPU warning threshold percentage"
-    )
-    
-    CPU_CRITICAL_THRESHOLD: float = Field(
-        default=95.0,
-        ge=0.0,
-        le=100.0,
-        description="CPU critical threshold percentage"
-    )
-    
-    MEMORY_WARNING_THRESHOLD: float = Field(
-        default=85.0,
-        ge=0.0,
-        le=100.0,
-        description="Memory warning threshold percentage"
-    )
-    
-    MEMORY_CRITICAL_THRESHOLD: float = Field(
-        default=95.0,
-        ge=0.0,
-        le=100.0,
-        description="Memory critical threshold percentage"
-    )
-    
-    DISK_WARNING_THRESHOLD: float = Field(
-        default=85.0,
-        ge=0.0,
-        le=100.0,
-        description="Disk warning threshold percentage"
-    )
-    
-    DISK_CRITICAL_THRESHOLD: float = Field(
-        default=95.0,
-        ge=0.0,
-        le=100.0,
-        description="Disk critical threshold percentage"
-    )
-    
-    # Database Performance Thresholds
-    SLOW_QUERY_THRESHOLD: float = Field(
-        default=1.0,
-        ge=0.1,
-        le=60.0,
-        description="Slow query threshold in seconds"
-    )
-    
-    MAX_CONNECTIONS: int = Field(
-        default=100,
-        ge=1,
-        le=1000,
-        description="Maximum database connections"
-    )
-    
-    REPLICATION_LAG_THRESHOLD: float = Field(
-        default=10.0,
-        ge=1.0,
-        le=300.0,
-        description="Replication lag threshold in seconds"
-    )
-    
-    DATABASE_SIZE_THRESHOLD_GB: float = Field(
-        default=10.0,
-        ge=1.0,
-        le=1000.0,
-        description="Database size threshold in GB"
-    )
-    
-    # Metrics Collection Configuration
-    METRICS_COLLECTION_INTERVAL_MINUTES: int = Field(
-        default=5,
-        ge=1,
-        le=60,
-        description="Metrics collection interval in minutes"
-    )
-    
-    SLOW_QUERIES_DEFAULT_LIMIT: int = Field(
-        default=10,
-        ge=1,
-        le=1000,
-        description="Default limit for slow queries"
-    )
-    
-    SLOW_QUERIES_THRESHOLD_MS: float = Field(
-        default=1000.0,
-        ge=100.0,
-        le=60000.0,
-        description="Slow queries threshold in milliseconds"
-    )
-    
-    
-    @field_validator("CPU_CRITICAL_THRESHOLD")
-    @classmethod
-    def validate_cpu_thresholds(cls, v, info):
-        """Validate CPU thresholds are logical."""
-        warning_threshold = info.data.get("CPU_WARNING_THRESHOLD", 0)
-        if v <= warning_threshold:
-            raise ValueError("CPU critical threshold must be greater than warning threshold")
-        return v
-    
-    @field_validator("MEMORY_CRITICAL_THRESHOLD")
-    @classmethod
-    def validate_memory_thresholds(cls, v, info):
-        """Validate memory thresholds are logical."""
-        warning_threshold = info.data.get("MEMORY_WARNING_THRESHOLD", 0)
-        if v <= warning_threshold:
-            raise ValueError("Memory critical threshold must be greater than warning threshold")
-        return v
-    
-    @field_validator("DISK_CRITICAL_THRESHOLD")
-    @classmethod
-    def validate_disk_thresholds(cls, v, info):
-        """Validate disk thresholds are logical."""
-        warning_threshold = info.data.get("DISK_WARNING_THRESHOLD", 0)
-        if v <= warning_threshold:
-            raise ValueError("Disk critical threshold must be greater than warning threshold")
-        return v
-    
-    @field_validator("DB_MAX_CONNECTIONS")
-    @classmethod
-    def validate_db_connections(cls, v, info):
-        """Validate database connection pool sizes."""
-        min_connections = info.data.get("DB_MIN_CONNECTIONS", 1)
-        if v < min_connections:
-            raise ValueError("Max connections must be greater than or equal to min connections")
-        return v
-    
-    @property
-    def is_production(self) -> bool:
-        """Check if running in production environment."""
-        return self.ENVIRONMENT == Environment.PRODUCTION
-    
-    @property
-    def is_development(self) -> bool:
-        """Check if running in development environment."""
-        return self.ENVIRONMENT == Environment.DEVELOPMENT
-    
+    # Properties
     @property
     def database_url(self) -> str:
         """Get database URL as string."""
@@ -397,58 +61,15 @@ class Settings(BaseSettings):
         """Get replica URL as string."""
         return self.REPLICA_URL.get_secret_value() if self.REPLICA_URL else None
     
-    @property
-    def prometheus_password(self) -> Optional[str]:
-        """Get Prometheus password as string."""
-        return self.PROMETHEUS_PASSWORD.get_secret_value() if self.PROMETHEUS_PASSWORD else None
-    
-    @property
-    def prometheus_bearer_token(self) -> Optional[str]:
-        """Get Prometheus bearer token as string."""
-        return self.PROMETHEUS_BEARER_TOKEN.get_secret_value() if self.PROMETHEUS_BEARER_TOKEN else None
-    
-    @property
-    def recovery_bearer_token(self) -> Optional[str]:
-        """Get recovery bearer token as string."""
-        return self.RECOVERY_BEARER_TOKEN.get_secret_value() if self.RECOVERY_BEARER_TOKEN else None
-    
-    @property
-    def grafana_api_key(self) -> Optional[str]:
-        """Get Grafana API key as string."""
-        return self.GRAFANA_API_KEY.get_secret_value() if self.GRAFANA_API_KEY else None
-    
-    @field_validator("ENVIRONMENT")
-    @classmethod
-    def validate_environment(cls, v):
-        """Validate environment is supported."""
-        if v not in Environment:
-            raise ValueError(f"Environment must be one of: {[e.value for e in Environment]}")
-        return v
-    
-    def get_database_url_with_auth(self, username: str = None, password: str = None) -> str:
-        """Get database URL with optional authentication override."""
-        url = self.database_url
-        if username and password:
-            # Replace authentication in URL
-            import re
-            pattern = r"postgresql://[^@]*@"
-            replacement = f"postgresql://{username}:{password}@"
-            url = re.sub(pattern, replacement, url)
-        return url
-    
     model_config = SettingsConfigDict(
         env_file=".env",
-        env_file_encoding="utf-8",
         case_sensitive=True,
-        validate_assignment=True,
-        extra="forbid",
-        env_prefix="DB_MONITOR_",
-        env_nested_delimiter="__"
+        extra="forbid"
     )
 
 # Create global settings instance
 settings = Settings()
 
 # Export commonly used settings for easier access
-__all__ = ["settings", "Environment", "LogLevel", "Settings"]
+__all__ = ["settings", "Environment", "Settings"]
 
