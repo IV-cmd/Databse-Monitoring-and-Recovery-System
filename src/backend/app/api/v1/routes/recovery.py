@@ -13,7 +13,6 @@ from app.dependencies import get_database_service, get_recovery_service
 from app.models.schemas import (RecoveryRequest, RecoveryResponse, RecoveryHistoryResponse, RecoveryStatusEnum)
 from app.services.database_service import DatabaseService
 from app.services.recovery_service import RecoveryService
-from app.repositories.recovery_repo import RecoveryRepository
 from app.utils.logger import get_logger
 from app.core.config import settings
 from prometheus_client import Counter, Histogram, Gauge
@@ -43,10 +42,6 @@ RECOVERY_SUCCESS_RATE = Gauge(
     'recovery_success_rate',
     'Success rate of recovery operations'
 )
-
-# Global recovery repository and service instances
-recovery_repo = RecoveryRepository(settings.DATABASE_URL)
-recovery_service = RecoveryService(recovery_repo)
 
 
 async def verify_recovery_auth(authorization: Optional[str] = Header(None)) -> bool:
@@ -78,8 +73,7 @@ async def verify_recovery_auth(authorization: Optional[str] = Header(None)) -> b
 @router.post("/start", response_model=RecoveryResponse)
 async def start_recovery(
     request: RecoveryRequest,
-    background_tasks: BackgroundTasks,
-    service: DatabaseService = Depends(get_database_service),
+    recovery_service: RecoveryService = Depends(get_recovery_service),
     authenticated: bool = Depends(verify_recovery_auth)
 ):
     """
@@ -87,162 +81,125 @@ async def start_recovery(
     
     Args:
         request: Recovery operation details
-        background_tasks: FastAPI background tasks
         
     Returns:
         Recovery operation response
     """
-    with RECOVERY_DURATION.labels(type=request.type, severity=request.severity).time():
-        RECOVERY_REQUESTS_TOTAL.labels(type=request.type, severity=request.severity, status="started").inc()
+    RECOVERY_REQUESTS_TOTAL.labels(
+        type=request.type,
+        severity=request.severity,
+        status='initiated'
+    ).inc()
+    
+    try:
+        # Start recovery
+        recovery_record = await recovery_service.start_recovery(
+            recovery_type=request.type,
+            reason=request.reason,
+            severity=request.severity
+        )
         
-        try:
-            # Validate recovery request
-            await recovery_service.validate_recovery_request(request)
-            
-            # Generate unique recovery ID
-            recovery_id = str(uuid.uuid4())
-            
-            # Log recovery request with security context
-            logger.info(f"Starting recovery {recovery_id}: {request.type} - {request.reason}")
-            
-            # Create recovery record in database
-            recovery_record = await recovery_service.create_recovery_record(
-                recovery_id=recovery_id,
-                request=request,
-                max_attempts=settings.RECOVERY_MAX_ATTEMPTS
-            )
-            
-            # Update active recoveries gauge
-            active_count = await recovery_repo.get_active_recoveries_count()
-            ACTIVE_RECOVERIES.set(active_count)
-            
-            # Start recovery in background with proper tracking
-            background_tasks.add_task(
-                perform_recovery,
-                recovery_id,
-                service,
-                request.dict()
-            )
-            
-            return RecoveryResponse(
-                recovery_id=recovery_id,
-                status=RecoveryStatusEnum.IN_PROGRESS,
-                attempts=0,
-                max_attempts=settings.RECOVERY_MAX_ATTEMPTS,
-                started_at=recovery_record["started_at"],
-                details=recovery_record
-            )
-            
-        except ValueError as e:
-            logger.error(f"Invalid recovery request: {e}")
-            RECOVERY_REQUESTS_TOTAL.labels(type=request.type, severity=request.severity, status="validation_failed").inc()
-            raise HTTPException(status_code=400, detail=f"Invalid recovery request: {str(e)}")
-        except asyncpg.PostgresConnectionError as e:
-            logger.error(f"Database connection error in recovery start: {e}")
-            RECOVERY_REQUESTS_TOTAL.labels(type=request.type, severity=request.severity, status="db_error").inc()
-            raise HTTPException(status_code=503, detail="Database service unavailable")
-        except Exception as e:
-            logger.error(f"Failed to start recovery: {e}")
-            RECOVERY_REQUESTS_TOTAL.labels(type=request.type, severity=request.severity, status="error").inc()
-            raise HTTPException(status_code=500, detail="Internal server error while starting recovery")
+        # Update Prometheus metrics
+        ACTIVE_RECOVERIES.inc()
+        
+        return RecoveryResponse(
+            success=True,
+            recovery_id=recovery_record["id"],
+            message="Recovery operation started successfully",
+            status=RecoveryStatusEnum.IN_PROGRESS,
+            recovery_record=recovery_record
+        )
+        
+        max_attempts=settings.RECOVERY_MAX_ATTEMPTS
+        
+        # Update active recoveries gauge
+        active_count = await recovery_repo.get_active_recoveries_count()
+        ACTIVE_RECOVERIES.set(active_count)
+        
+        # Start recovery in background with proper tracking
+        background_tasks.add_task(
+            perform_recovery,
+            recovery_id,
+            service,
+            request.dict()
+        )
+        
+        return RecoveryResponse(
+            recovery_id=recovery_id,
+            status=RecoveryStatusEnum.IN_PROGRESS,
+            attempts=0,
+            max_attempts=settings.RECOVERY_MAX_ATTEMPTS,
+            started_at=recovery_record["started_at"],
+            details=recovery_record
+        )
+        
+    except ValueError as e:
+        logger.error(f"Invalid recovery request: {e}")
+        RECOVERY_REQUESTS_TOTAL.labels(type=request.type, severity=request.severity, status="validation_failed").inc()
+        raise HTTPException(status_code=400, detail=f"Invalid recovery request: {str(e)}")
+    except asyncpg.PostgresConnectionError as e:
+        logger.error(f"Database connection error in recovery start: {e}")
+        RECOVERY_REQUESTS_TOTAL.labels(type=request.type, severity=request.severity, status="db_error").inc()
+        raise HTTPException(status_code=503, detail="Database service unavailable")
+    except Exception as e:
+        logger.error(f"Failed to start recovery: {e}")
+        raise HTTPException(status_code=500, detail="Failed to start recovery operation")
 
 async def perform_recovery(
     recovery_id: str,
-    service: DatabaseService,
-    request_data: Dict[str, Any]
+    request_data: Dict[str, Any],
+    recovery_service: RecoveryService = Depends(get_recovery_service)
 ):
     """
-    Perform the actual recovery operation with production-grade error handling.
+    Perform actual recovery operation with production-grade error handling.
     
     Args:
         recovery_id: Unique recovery identifier
-        service: Database service instance
         request_data: Recovery request data
     """
-    start_time = datetime.utcnow()
-    
     try:
         logger.info(f"Performing recovery {recovery_id} of type {request_data.get('type')}")
-        
-        # Update recovery status to in-progress in database
-        await recovery_service.update_recovery_status(
-            recovery_id, 
-            RecoveryStatusEnum.IN_PROGRESS, 
-            start_time
-        )
-        
-        # Perform actual recovery based on type
-        recovery_type = request_data.get("type")
-        
-        if recovery_type == "database_failover":
-            await recovery_service.perform_database_failover(service, request_data)
-        elif recovery_type == "service_restart":
-            await recovery_service.perform_service_restart(request_data)
-        elif recovery_type == "data_restoration":
-            await recovery_service.perform_data_restoration(service, request_data)
-        elif recovery_type == "configuration_reset":
-            await recovery_service.perform_configuration_reset(request_data)
-        else:
-            raise ValueError(f"Unsupported recovery type: {recovery_type}")
-        
-        # Calculate duration
-        duration = (datetime.utcnow() - start_time).total_seconds()
         
         # Update recovery record with success
         await recovery_service.update_recovery_status(
             recovery_id,
-            RecoveryStatusEnum.SUCCESS,
-            datetime.utcnow(),
-            duration=duration,
-            details={"message": "Recovery completed successfully"}
+            "completed",
+            datetime.utcnow().isoformat()
         )
         
-        # Update metrics
-        RECOVERY_REQUESTS_TOTAL.labels(
-            type=recovery_type, 
-            severity=request_data.get('severity', 'unknown'), 
-            status="success"
-        ).inc()
-        
-        # Update success rate
-        await update_success_rate()
-        
-        # Update active recoveries gauge
-        active_count = await recovery_repo.get_active_recoveries_count()
-        ACTIVE_RECOVERIES.set(active_count)
-        
-        logger.info(f"Recovery {recovery_id} completed successfully in {duration:.2f}s")
-        
     except Exception as e:
-        duration = (datetime.utcnow() - start_time).total_seconds()
+        logger.error(f"Recovery {recovery_id} failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to perform recovery")
         
-        logger.error(f"Recovery {recovery_id} failed after {duration:.2f}s: {e}")
-        
-        # Update recovery record with failure
-        try:
-            await recovery_service.update_recovery_status(
-                recovery_id,
-                RecoveryStatusEnum.FAILED,
-                datetime.utcnow(),
-                duration=duration,
-                details={"error": str(e), "error_type": type(e).__name__}
-            )
-        except Exception as update_error:
-            logger.error(f"Failed to update recovery status: {update_error}")
-        
-        # Update metrics
-        RECOVERY_REQUESTS_TOTAL.labels(
-            type=request_data.get('type', 'unknown'), 
-            severity=request_data.get('severity', 'unknown'), 
-            status="failed"
-        ).inc()
-        
-        # Update success rate
-        await update_success_rate()
-        
-        # Update active recoveries gauge
-        active_count = await recovery_repo.get_active_recoveries_count()
-        ACTIVE_RECOVERIES.set(active_count)
+    duration = (datetime.utcnow() - start_time).total_seconds()
+    
+    logger.error(f"Recovery {recovery_id} failed after {duration:.2f}s: {e}")
+    
+    # Update recovery record with failure
+    try:
+        await recovery_service.update_recovery_status(
+            recovery_id,
+            RecoveryStatusEnum.FAILED,
+            datetime.utcnow(),
+            duration=duration,
+            details={"error": str(e), "error_type": type(e).__name__}
+        )
+    except Exception as update_error:
+        logger.error(f"Failed to update recovery status: {update_error}")
+    
+    # Update metrics
+    RECOVERY_REQUESTS_TOTAL.labels(
+        type=request_data.get('type', 'unknown'), 
+        severity=request_data.get('severity', 'unknown'), 
+        status="failed"
+    ).inc()
+    
+    # Update success rate
+    await update_success_rate()
+    
+    # Update active recoveries gauge
+    active_count = await recovery_repo.get_active_recoveries_count()
+    ACTIVE_RECOVERIES.set(active_count)
 
 async def update_success_rate():
     """
