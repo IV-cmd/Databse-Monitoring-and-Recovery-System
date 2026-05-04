@@ -1,406 +1,184 @@
 """
-Monitoring Routes
-This module contains all monitoring related API endpoints.
+Clean Monitoring Routes
+
+Production-grade monitoring API endpoints aligned with service layers.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, Header
-from typing import Dict, Any, Optional, List
-from datetime import datetime, timedelta
+from fastapi import APIRouter, Depends, HTTPException, Response
+from typing import Dict, Any, Optional
+from datetime import datetime
 import httpx
-import base64
-from app.dependencies import get_database_service, get_metrics_service
+
+from app.dependencies import get_monitoring_service, get_database_service, get_metrics_service
 from app.models.schemas import MonitoringStatusResponse, MonitoringMetricsResponse
+from app.services.monitoring_service import MonitoringService
 from app.services.database_service import DatabaseService
 from app.services.metrics_service import MetricsService
-from app.repositories.metrics_repo import MetricsRepository
-from app.utils.logger import get_logger
 from app.core.config import settings
-import asyncpg
-import psutil
-from prometheus_client import Counter, Histogram, Gauge, generate_latest
+from prometheus_client import Counter, Gauge, generate_latest
 
 router = APIRouter()
-logger = get_logger(__name__)
 
-def handle_database_errors(func_name: str, error: Exception):
-    """Handle common database errors with consistent logging and HTTP responses."""
-    if isinstance(error, asyncpg.PostgresConnectionError):
-        logger.error(f"Database connection error in {func_name}: {error}")
-        raise HTTPException(status_code=503, detail="Database service unavailable")
-    elif isinstance(error, ValueError):
-        logger.error(f"Invalid parameters in {func_name}: {error}")
-        raise HTTPException(status_code=400, detail="Invalid query parameters")
-    elif isinstance(error, httpx.RequestError):
-        logger.error(f"Prometheus connection error in {func_name}: {error}")
-        raise HTTPException(status_code=503, detail="Failed to connect to Prometheus")
-    else:
-        logger.error(f"Unexpected error in {func_name}: {error}")
-        raise HTTPException(status_code=500, detail=f"Internal server error in {func_name}")
+# Simple Prometheus metrics
+MONITORING_REQUESTS = Counter('monitoring_requests_total', 'Total monitoring requests')
+DATABASE_STATUS = Gauge('database_status', 'Database status (1=healthy, 0=unhealthy)')
+SYSTEM_CPU_USAGE = Gauge('system_cpu_usage_percent', 'Current CPU usage percentage')
+SYSTEM_MEMORY_USAGE = Gauge('system_memory_usage_percent', 'Current memory usage percentage')
+SYSTEM_DISK_USAGE = Gauge('system_disk_usage_percent', 'Current disk usage percentage')
 
-# Prometheus metrics definitions
-MONITORING_REQUESTS_TOTAL = Counter(
-    'monitoring_requests_total',
-    'Total number of monitoring requests',
-    ['endpoint', 'method']
-)
 
-MONITORING_REQUEST_DURATION = Histogram(
-    'monitoring_request_duration_seconds',
-    'Time spent processing monitoring requests',
-    ['endpoint', 'method']
-)
-
-DATABASE_CONNECTIONS_ACTIVE = Gauge(
-    'database_connections_active',
-    'Number of active database connections'
-)
-
-SLOW_QUERIES_COUNT = Gauge(
-    'slow_queries_count',
-    'Number of slow queries detected'
-)
-
-MONITORING_STATUS = Gauge(
-    'monitoring_status',
-    'Monitoring system status (1=healthy, 0=degraded)'
-)
-
-# System metrics
-SYSTEM_CPU_PERCENT = Gauge(
-    'system_cpu_percent',
-    'Current CPU usage percentage'
-)
-
-SYSTEM_MEMORY_PERCENT = Gauge(
-    'system_memory_percent',
-    'Current memory usage percentage'
-)
-
-SYSTEM_DISK_PERCENT = Gauge(
-    'system_disk_percent',
-    'Current disk usage percentage'
-)
-
-SYSTEM_NETWORK_BYTES_SENT = Counter(
-    'system_network_bytes_sent_total',
-    'Total network bytes sent'
-)
-
-SYSTEM_NETWORK_BYTES_RECV = Counter(
-    'system_network_bytes_recv_total',
-    'Total network bytes received'
-)
-
-# Prometheus client configuration
 class PrometheusClient:
+    """Simple Prometheus client for essential operations."""
+    
     def __init__(self):
-        self.base_url = settings.PROMETHEUS_URL
-        self.username = settings.PROMETHEUS_USERNAME
-        self.password = settings.PROMETHEUS_PASSWORD
-        self.timeout = settings.PROMETHEUS_TIMEOUT
+        self.base_url = getattr(settings, 'PROMETHEUS_URL', 'http://localhost:9090')
+        self.timeout = 30
     
-    def get_auth_headers(self) -> Dict[str, str]:
-        """Get authentication headers for Prometheus API."""
-        if self.username and self.password:
-            credentials = base64.b64encode(f"{self.username}:{self.password}".encode()).decode()
-            return {"Authorization": f"Basic {credentials}"}
-        return {}
-    
-    async def query(self, query: str, time: Optional[datetime] = None) -> Dict[str, Any]:
-        """Execute PromQL query against Prometheus."""
-        params = {"query": query}
-        if time:
-            params["time"] = time.timestamp()
-        
-        headers = self.get_auth_headers()
-        
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            try:
-                response = await client.get(
-                    f"{self.base_url}/api/v1/query",
-                    params=params,
-                    headers=headers
-                )
+    async def get_targets(self) -> Dict[str, Any]:
+        """Get Prometheus targets status."""
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.get(f"{self.base_url}/api/v1/targets")
                 response.raise_for_status()
                 return response.json()
-            except httpx.HTTPStatusError as e:
-                logger.error(f"Prometheus query failed: {e}")
-                raise HTTPException(status_code=502, detail="Prometheus service unavailable")
-            except httpx.RequestError as e:
-                logger.error(f"Prometheus connection error: {e}")
-                raise HTTPException(status_code=503, detail="Failed to connect to Prometheus")
+        except httpx.RequestError:
+            return {"status": "error", "message": "Failed to connect to Prometheus"}
+        except httpx.HTTPStatusError:
+            return {"status": "error", "message": "Prometheus service unavailable"}
     
-    async def query_range(self, query: str, start: datetime, end: datetime, step: str = "1m") -> Dict[str, Any]:
-        """Execute PromQL range query against Prometheus."""
-        params = {
-            "query": query,
-            "start": start.timestamp(),
-            "end": end.timestamp(),
-            "step": step
-        }
-        
-        headers = self.get_auth_headers()
-        
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            try:
-                response = await client.get(
-                    f"{self.base_url}/api/v1/query_range",
-                    params=params,
-                    headers=headers
-                )
+    async def get_alerts(self) -> Dict[str, Any]:
+        """Get current Prometheus alerts."""
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.get(f"{self.base_url}/api/v1/alerts")
                 response.raise_for_status()
                 return response.json()
-            except httpx.HTTPStatusError as e:
-                logger.error(f"Prometheus range query failed: {e}")
-                raise HTTPException(status_code=502, detail="Prometheus service unavailable")
-            except httpx.RequestError as e:
-                logger.error(f"Prometheus connection error: {e}")
-                raise HTTPException(status_code=503, detail="Failed to connect to Prometheus")
+        except httpx.RequestError:
+            return {"status": "error", "message": "Failed to connect to Prometheus"}
+        except httpx.HTTPStatusError:
+            return {"status": "error", "message": "Prometheus service unavailable"}
+
 
 # Global Prometheus client instance
 prometheus_client = PrometheusClient()
 
-async def verify_prometheus_auth(authorization: Optional[str] = Header(None)) -> bool:
-    """Verify Prometheus authentication token."""
-    if not settings.PROMETHEUS_AUTH_REQUIRED:
-        return True
-    
-    if not authorization:
-        raise HTTPException(
-            status_code=401, 
-            detail="Prometheus authentication required",
-            headers={"WWW-Authenticate": "Bearer"}
-        )
-    
-    # Verify Bearer token
-    if authorization.startswith("Bearer "):
-        token = authorization[7:]  # Remove 'Bearer ' prefix
-        if token == settings.PROMETHEUS_BEARER_TOKEN:
-            return True
-    
-    raise HTTPException(
-        status_code=401,
-        detail="Invalid Prometheus authentication token",
-        headers={"WWW-Authenticate": "Bearer"}
-    )
-
 @router.get("/status", response_model=MonitoringStatusResponse)
 async def get_monitoring_status(
-    service: DatabaseService = Depends(get_database_service),
+    monitoring_service: MonitoringService = Depends(get_monitoring_service),
+    database_service: DatabaseService = Depends(get_database_service),
     metrics_service: MetricsService = Depends(get_metrics_service)
 ):
-    """
-    Get current monitoring status.
+    """Get current monitoring status."""
+    MONITORING_REQUESTS.inc()
     
-    Returns:
-        Current monitoring system status
-    """
-    with MONITORING_REQUEST_DURATION.labels(endpoint="/status", method="GET").time():
-        MONITORING_REQUESTS_TOTAL.labels(endpoint="/status", method="GET").inc()
+    try:
+        # Get database status
+        db_status = await database_service.get_database_status()
         
-        try:
-            status = await service.get_status()
-            primary_status = status.get("primary", {})
-            
-            # Get system metrics using MetricsService
-            system_metrics = await metrics_service.collect_all_metrics()
-            
-            # Determine overall health
-            is_healthy = primary_status.get("status") == "healthy"
-            monitoring_status = "healthy" if is_healthy else "degraded"
-            
-            # Update Prometheus metrics
-            MONITORING_STATUS.set(1 if is_healthy else 0)
-            
-            # Update database connections gauge
-            connections = primary_status.get("connections", {})
-            active_connections = connections.get("active", 0)
-            DATABASE_CONNECTIONS_ACTIVE.set(active_connections)
-            
-            return MonitoringStatusResponse(
-                status=monitoring_status,
-                is_monitoring=True,
-                last_check=status["timestamp"],
-                interval_seconds=settings.MONITORING_INTERVAL_SECONDS,
-                metrics={
-                    **primary_status,
-                    "system": system_metrics
-                }
-            )
-        except asyncpg.PostgresConnectionError as e:
-            logger.error(f"Database connection error in monitoring status: {e}")
-            MONITORING_STATUS.set(0)
-            raise HTTPException(status_code=503, detail="Database service unavailable")
-        except Exception as e:
-            logger.error(f"Unexpected error in monitoring status: {e}")
-            MONITORING_STATUS.set(0)
-            raise HTTPException(status_code=500, detail="Internal server error while retrieving monitoring status")
+        # Get system metrics
+        system_metrics = await metrics_service.collect_all_metrics()
+        
+        # Get latest monitoring data
+        monitoring_data = await monitoring_service.get_latest_monitoring(limit=1)
+        
+        # Update Prometheus metrics
+        is_healthy = db_status.get("status") == "healthy"
+        DATABASE_STATUS.set(1 if is_healthy else 0)
+        
+        # Update system metrics
+        system_data = system_metrics.get("system", {})
+        SYSTEM_CPU_USAGE.set(system_data.get("cpu", {}).get("percent", 0))
+        SYSTEM_MEMORY_USAGE.set(system_data.get("memory", {}).get("percent", 0))
+        SYSTEM_DISK_USAGE.set(system_data.get("disk", {}).get("percent", 0))
+        
+        # Combine metrics
+        combined_metrics = {
+            "database": db_status,
+            "system": system_metrics
+        }
+        
+        return MonitoringStatusResponse(
+            status="healthy" if is_healthy else "degraded",
+            is_monitoring=True,
+            last_check=datetime.utcnow(),
+            interval_seconds=30,
+            metrics=combined_metrics
+        )
+        
+    except Exception as e:
+        DATABASE_STATUS.set(0)
+        raise HTTPException(status_code=500, detail="Failed to get monitoring status")
 
 @router.get("/metrics", response_model=MonitoringMetricsResponse)
 async def get_monitoring_metrics(
-    include_slow_queries: bool = Query(False, description="Include slow queries in response"),
-    service: DatabaseService = Depends(get_database_service),
+    monitoring_service: MonitoringService = Depends(get_monitoring_service),
+    database_service: DatabaseService = Depends(get_database_service),
     metrics_service: MetricsService = Depends(get_metrics_service)
 ):
-    """
-    Get current monitoring metrics.
-    Args:
-        include_slow_queries: Whether to include slow queries analysis
+    """Get current monitoring metrics."""
+    try:
+        # Get database status
+        db_status = await database_service.get_database_status()
         
-    Returns:
-        Current monitoring metrics
-    """
-    with MONITORING_REQUEST_DURATION.labels(endpoint="/metrics", method="GET").time():
-        MONITORING_REQUESTS_TOTAL.labels(endpoint="/metrics", method="GET").inc()
+        # Get system metrics
+        system_metrics = await metrics_service.collect_all_metrics()
         
-        try:
-            status = await service.get_status()
-            primary_metrics = status.get("primary", {})
-            
-            # Get system metrics using MetricsService
-            system_metrics = await metrics_service.collect_all_metrics()
-            
-            alerts = []
-            
-            # Add slow queries if requested
-            if include_slow_queries:
-                slow_queries = await service.get_slow_queries(
-                    limit=settings.SLOW_QUERIES_DEFAULT_LIMIT, 
-                    threshold_ms=settings.SLOW_QUERIES_THRESHOLD_MS
-                )
-                if slow_queries.get("success") and slow_queries["queries"]:
-                    slow_query_count = len(slow_queries["queries"])
-                    alerts.append({
-                        "type": "slow_queries",
-                        "severity": "medium",
-                        "count": slow_query_count,
-                        "details": slow_queries["queries"]
-                    })
-                    # Update Prometheus metrics
-                    SLOW_QUERIES_COUNT.set(slow_query_count)
-            
-            # Combine metrics
-            combined_metrics = {
-                **primary_metrics,
-                "system": system_metrics
-            }
-            
-            return MonitoringMetricsResponse(
-                timestamp=status["timestamp"],
-                metrics=combined_metrics,
-                alerts=alerts if alerts else None
-            )
-        except asyncpg.PostgresConnectionError as e:
-            logger.error(f"Database connection error in current metrics: {e}")
-            raise HTTPException(status_code=503, detail="Database service unavailable")
-        except Exception as e:
-            logger.error(f"Unexpected error in current metrics: {e}")
-            raise HTTPException(status_code=500, detail="Internal server error while retrieving metrics")
+        # Get latest monitoring data
+        monitoring_data = await monitoring_service.get_latest_monitoring(limit=10)
+        
+        # Combine metrics
+        combined_metrics = {
+            "database": db_status,
+            "system": system_metrics,
+            "monitoring": monitoring_data
+        }
+        
+        return MonitoringMetricsResponse(
+            timestamp=datetime.utcnow(),
+            metrics=combined_metrics
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to get monitoring metrics")
 
-@router.get("/slow-queries")
-async def get_slow_queries(
-    limit: int = Query(settings.SLOW_QUERIES_DEFAULT_LIMIT, ge=1, le=100, description="Maximum number of queries to return"),
-    threshold_ms: float = Query(settings.SLOW_QUERIES_THRESHOLD_MS, ge=100.0, le=60000.0, description="Minimum execution time threshold"),
-    service: DatabaseService = Depends(get_database_service)
+@router.post("/data")
+async def store_monitoring_data(
+    data: Dict[str, Any],
+    monitoring_service: MonitoringService = Depends(get_monitoring_service)
 ):
-    """
-    Get slow queries from the database.
-    Args:
-        limit: Maximum number of queries to return
-        threshold_ms: Minimum execution time to consider "slow"
-        
-    Returns:
-        List of slow queries
-    """
-    with MONITORING_REQUEST_DURATION.labels(endpoint="/slow-queries", method="GET").time():
-        MONITORING_REQUESTS_TOTAL.labels(endpoint="/slow-queries", method="GET").inc()
-        
-        try:
-            result = await service.get_slow_queries(limit, threshold_ms)
-            
-            # Update Prometheus metrics
-            if result.get("success") and result["queries"]:
-                SLOW_QUERIES_COUNT.set(len(result["queries"]))
-            else:
-                SLOW_QUERIES_COUNT.set(0)
-            
-            return result
-        except asyncpg.PostgresConnectionError as e:
-            logger.error(f"Database connection error in slow queries: {e}")
-            raise HTTPException(status_code=503, detail="Database service unavailable")
-        except ValueError as e:
-            logger.error(f"Invalid parameters in slow queries: {e}")
-            raise HTTPException(status_code=400, detail="Invalid query parameters")
-        except Exception as e:
-            logger.error(f"Unexpected error in slow queries: {e}")
-            raise HTTPException(status_code=500, detail="Internal server error while retrieving slow queries")
+    """Store monitoring data."""
+    try:
+        result = await monitoring_service.store_monitoring_data(data)
+        return {"success": True, "id": result["id"]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to store monitoring data")
 
-@router.get("/table-sizes")
-async def get_table_sizes(service: DatabaseService = Depends(get_database_service)):
-    """
-    Get table sizes from the database. 
-    Returns:
-        List of tables with their sizes
-    """
-    with MONITORING_REQUEST_DURATION.labels(endpoint="/table-sizes", method="GET").time():
-        MONITORING_REQUESTS_TOTAL.labels(endpoint="/table-sizes", method="GET").inc()
-        
-        try:
-            result = await service.get_table_sizes()
-            return result
-        except asyncpg.PostgresConnectionError as e:
-            logger.error(f"Database connection error in table sizes: {e}")
-            raise HTTPException(status_code=503, detail="Database service unavailable")
-        except Exception as e:
-            logger.error(f"Unexpected error in table sizes: {e}")
-            raise HTTPException(status_code=500, detail="Internal server error while retrieving table sizes")
-
-@router.get("/connections")
-async def get_connection_info(service: DatabaseService = Depends(get_database_service)):
-    """
-    Get database connection information.
-    Returns:
-        Current connection status and information
-    """
-    with MONITORING_REQUEST_DURATION.labels(endpoint="/connections", method="GET").time():
-        MONITORING_REQUESTS_TOTAL.labels(endpoint="/connections", method="GET").inc()
-        
-        try:
-            info = await service.get_connection_info()
-            
-            # Update Prometheus metrics
-            if info.get("success") and info["connections"]:
-                active_connections = info["connections"].get("active", 0)
-                DATABASE_CONNECTIONS_ACTIVE.set(active_connections)
-            
-            return info
-        except asyncpg.PostgresConnectionError as e:
-            logger.error(f"Database connection error in connection info: {e}")
-            raise HTTPException(status_code=503, detail="Database service unavailable")
-        except Exception as e:
-            logger.error(f"Unexpected error in connection info: {e}")
-            raise HTTPException(status_code=500, detail="Internal server error while retrieving connection info")
+@router.get("/data")
+async def get_monitoring_data(
+    limit: int = 50,
+    monitoring_service: MonitoringService = Depends(get_monitoring_service)
+):
+    """Get latest monitoring data."""
+    try:
+        data = await monitoring_service.get_latest_monitoring(limit)
+        return {"monitoring_data": data, "count": len(data)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to get monitoring data")
 
 @router.get("/prometheus")
-async def get_prometheus_metrics(metrics_service: MetricsService = Depends(get_metrics_service)):
-    """
-    Get all metrics in Prometheus format.
-    Returns:
-        All metrics (system + application) formatted for Prometheus scraping
-    """
+async def get_prometheus_metrics(
+    metrics_service: MetricsService = Depends(get_metrics_service)
+):
+    """Get Prometheus metrics."""
     try:
         # Update system metrics
         system_metrics = await metrics_service.collect_all_metrics()
+        system_data = system_metrics.get("system", {})
         
-        # Update Prometheus gauges with system metrics
-        SYSTEM_CPU_PERCENT.set(system_metrics.get("cpu", {}).get("percent", 0))
-        SYSTEM_MEMORY_PERCENT.set(system_metrics.get("memory", {}).get("percent", 0))
-        SYSTEM_DISK_PERCENT.set(system_metrics.get("disk", {}).get("percent", 0))
-        
-        # Update network counters (note: these are cumulative, so we'd need to track deltas)
-        network_metrics = system_metrics.get("network", {})
-        SYSTEM_NETWORK_BYTES_SENT._value._value = network_metrics.get("bytes_sent", 0)
-        SYSTEM_NETWORK_BYTES_RECV._value._value = network_metrics.get("bytes_recv", 0)
+        # Update Prometheus gauges
+        SYSTEM_CPU_USAGE.set(system_data.get("cpu", {}).get("percent", 0))
+        SYSTEM_MEMORY_USAGE.set(system_data.get("memory", {}).get("percent", 0))
+        SYSTEM_DISK_USAGE.set(system_data.get("disk", {}).get("percent", 0))
         
         # Generate Prometheus metrics
         metrics_data = generate_latest()
@@ -410,218 +188,85 @@ async def get_prometheus_metrics(metrics_service: MetricsService = Depends(get_m
             media_type="text/plain"
         )
     except Exception as e:
-        logger.error(f"Failed to generate Prometheus metrics: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error while generating Prometheus metrics")
+        raise HTTPException(status_code=500, detail="Failed to generate Prometheus metrics")
 
-@router.get("/prometheus/query")
-async def prometheus_query(
-    query: str = Query(..., description="PromQL query to execute"),
-    time: Optional[datetime] = Query(None, description="Query timestamp (optional)"),
-    authenticated: bool = Depends(verify_prometheus_auth)
+@router.get("/alerts")
+async def get_monitoring_alerts(
+    monitoring_service: MonitoringService = Depends(get_monitoring_service)
 ):
-    """
-    Execute PromQL query against Prometheus.
-    Args:
-        query: PromQL query string
-        time: Optional timestamp for query
+    """Get current monitoring alerts."""
+    try:
+        # Get latest monitoring data
+        monitoring_data = await monitoring_service.get_latest_monitoring(limit=10)
         
-    Returns:
-        Prometheus query results
-    """
-    with MONITORING_REQUEST_DURATION.labels(endpoint="/prometheus/query", method="GET").time():
-        MONITORING_REQUESTS_TOTAL.labels(endpoint="/prometheus/query", method="GET").inc()
+        # Get system alerts using DatabaseMonitor
+        system_alerts = []
+        for data in monitoring_data:
+            alerts = await monitoring_service.check_monitoring_alerts(data)
+            system_alerts.extend(alerts)
         
-        try:
-            result = await prometheus_client.query(query, time)
-            
-            # Validate response format
-            if result.get("status") != "success":
-                error_type = result.get("errorType", "unknown")
-                error_msg = result.get("error", "Unknown PromQL query error")
-                logger.error(f"PromQL query error: {error_type} - {error_msg}")
-                raise HTTPException(status_code=400, detail=f"PromQL query failed: {error_msg}")
-            
-            return {
-                "status": result["status"],
-                "data": result["data"],
-                "query": query,
-                "time": time.isoformat() if time else "now"
-            }
-            
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"Unexpected error in PromQL query: {e}")
-            raise HTTPException(status_code=500, detail="Internal server error while executing PromQL query")
+        # Get alerts from Prometheus
+        prometheus_alerts = await prometheus_client.get_alerts()
+        
+        return {
+            "prometheus_alerts": prometheus_alerts,
+            "system_alerts": system_alerts,
+            "total_count": len(system_alerts) + len(prometheus_alerts.get("data", {}).get("alerts", [])),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to get monitoring alerts")
 
-@router.get("/prometheus/query_range")
-async def prometheus_query_range(
-    query: str = Query(..., description="PromQL query to execute"),
-    start: datetime = Query(..., description="Start time for range query"),
-    end: datetime = Query(..., description="End time for range query"),
-    step: str = Query("1m", description="Query step interval"),
-    authenticated: bool = Depends(verify_prometheus_auth)
+@router.get("/query")
+async def query_monitoring_data(
+    start_time: Optional[datetime] = None,
+    end_time: Optional[datetime] = None,
+    limit: int = 100,
+    monitoring_service: MonitoringService = Depends(get_monitoring_service)
 ):
-    """
-    Execute PromQL range query against Prometheus.
-    Args:
-        query: PromQL query string
-        start: Start time for range
-        end: End time for range
-        step: Step interval (e.g., '1m', '5m', '1h')
+    """Query monitoring data with time range filtering."""
+    try:
+        # Get monitoring data
+        monitoring_data = await monitoring_service.get_latest_monitoring(limit)
         
-    Returns:
-        Prometheus range query results
-    """
-    with MONITORING_REQUEST_DURATION.labels(endpoint="/prometheus/query_range", method="GET").time():
-        MONITORING_REQUESTS_TOTAL.labels(endpoint="/prometheus/query_range", method="GET").inc()
+        # Simple time filtering
+        if start_time or end_time:
+            filtered_data = []
+            for data in monitoring_data:
+                data_time = data.get("timestamp")
+                if isinstance(data_time, str):
+                    data_time = datetime.fromisoformat(data_time.replace('Z', '+00:00'))
+                
+                if start_time and data_time < start_time:
+                    continue
+                if end_time and data_time > end_time:
+                    continue
+                filtered_data.append(data)
+            monitoring_data = filtered_data
         
-        try:
-            # Validate time range
-            if start >= end:
-                raise HTTPException(status_code=400, detail="start time must be before end time")
-            
-            # Validate step format
-            if not step or len(step) < 2:
-                raise HTTPException(status_code=400, detail="invalid step format")
-            
-            result = await prometheus_client.query_range(query, start, end, step)
-            
-            # Validate response format
-            if result.get("status") != "success":
-                error_type = result.get("errorType", "unknown")
-                error_msg = result.get("error", "Unknown PromQL query error")
-                logger.error(f"PromQL range query error: {error_type} - {error_msg}")
-                raise HTTPException(status_code=400, detail=f"PromQL range query failed: {error_msg}")
-            
-            return {
-                "status": result["status"],
-                "data": result["data"],
-                "query": query,
-                "start": start.isoformat(),
-                "end": end.isoformat(),
-                "step": step
+        return {
+            "monitoring_data": monitoring_data,
+            "count": len(monitoring_data),
+            "query_params": {
+                "start_time": start_time.isoformat() if start_time else None,
+                "end_time": end_time.isoformat() if end_time else None,
+                "limit": limit
             }
-            
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"Unexpected error in PromQL range query: {e}")
-            raise HTTPException(status_code=500, detail="Internal server error while executing PromQL range query")
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to query monitoring data")
 
-@router.get("/prometheus/alerts")
-async def get_prometheus_alerts(
-    authenticated: bool = Depends(verify_prometheus_auth)
-):
-    """
-    Get current Prometheus alerts.
-    Returns:
-        Active Prometheus alerts
-    """
-    with MONITORING_REQUEST_DURATION.labels(endpoint="/prometheus/alerts", method="GET").time():
-        MONITORING_REQUESTS_TOTAL.labels(endpoint="/prometheus/alerts", method="GET").inc()
+@router.get("/targets")
+async def get_monitoring_targets():
+    """Get monitoring targets status."""
+    try:
+        # Get targets from Prometheus
+        prometheus_targets = await prometheus_client.get_targets()
         
-        try:
-            # Query active alerts
-            alerts_query = "ALERTS{alertstate=\"firing\"}"
-            result = await prometheus_client.query(alerts_query)
-            
-            if result.get("status") != "success":
-                error_msg = result.get("error", "Unknown alerts query error")
-                logger.error(f"Prometheus alerts query error: {error_msg}")
-                raise HTTPException(status_code=502, detail="Failed to retrieve alerts from Prometheus")
-            
-            alerts = []
-            if result["data"]["result"]:
-                for alert in result["data"]["result"]:
-                    alert_info = {
-                        "alertname": alert["metric"].get("alertname", "unknown"),
-                        "severity": alert["metric"].get("severity", "warning"),
-                        "instance": alert["metric"].get("instance", "unknown"),
-                        "job": alert["metric"].get("job", "unknown"),
-                        "value": alert["value"][1],
-                        "timestamp": alert["value"][0]
-                    }
-                    alerts.append(alert_info)
-            
-            return {
-                "status": "success",
-                "alerts": alerts,
-                "total_count": len(alerts),
-                "timestamp": datetime.utcnow().isoformat()
-            }
-            
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"Unexpected error in Prometheus alerts: {e}")
-            raise HTTPException(status_code=500, detail="Internal server error while retrieving Prometheus alerts")
+        return {
+            "prometheus_targets": prometheus_targets,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to get monitoring targets")
 
-@router.get("/prometheus/targets")
-async def get_prometheus_targets(
-    authenticated: bool = Depends(verify_prometheus_auth)
-):
-    """
-    Get Prometheus targets status.
-    Returns:
-        Prometheus targets and their health status
-    """
-    with MONITORING_REQUEST_DURATION.labels(endpoint="/prometheus/targets", method="GET").time():
-        MONITORING_REQUESTS_TOTAL.labels(endpoint="/prometheus/targets", method="GET").inc()
-        
-        try:
-            headers = prometheus_client.get_auth_headers()
-            
-            async with httpx.AsyncClient(timeout=prometheus_client.timeout) as client:
-                response = await client.get(
-                    f"{prometheus_client.base_url}/api/v1/targets",
-                    headers=headers
-                )
-                response.raise_for_status()
-                result = response.json()
-            
-            if result.get("status") != "success":
-                raise HTTPException(status_code=502, detail="Failed to retrieve targets from Prometheus")
-            
-            # Process targets data
-            targets_info = {
-                "active_targets": [],
-                "dropped_targets": []
-            }
-            
-            for target in result["data"]["activeTargets"]:
-                target_info = {
-                    "instance": target["labels"].get("instance", "unknown"),
-                    "job": target["labels"].get("job", "unknown"),
-                    "health": target["health"],
-                    "last_error": target.get("lastError"),
-                    "scrape_interval": target["labels"].get("scrape_interval", "unknown"),
-                    "scrape_timeout": target["labels"].get("scrape_timeout", "unknown")
-                }
-                targets_info["active_targets"].append(target_info)
-            
-            for target in result["data"]["droppedTargets"]:
-                target_info = {
-                    "instance": target["labels"].get("instance", "unknown"),
-                    "job": target["labels"].get("job", "unknown"),
-                    "reason": target.get("reason", "unknown")
-                }
-                targets_info["dropped_targets"].append(target_info)
-            
-            return {
-                "status": "success",
-                "data": targets_info,
-                "total_active": len(targets_info["active_targets"]),
-                "total_dropped": len(targets_info["dropped_targets"]),
-                "timestamp": datetime.utcnow().isoformat()
-            }
-            
-        except httpx.HTTPStatusError as e:
-            logger.error(f"Prometheus targets request failed: {e}")
-            raise HTTPException(status_code=502, detail="Prometheus service unavailable")
-        except httpx.RequestError as e:
-            logger.error(f"Prometheus connection error: {e}")
-            raise HTTPException(status_code=503, detail="Failed to connect to Prometheus")
-        except Exception as e:
-            logger.error(f"Unexpected error in Prometheus targets: {e}")
-            raise HTTPException(status_code=500, detail="Internal server error while retrieving Prometheus targets")
