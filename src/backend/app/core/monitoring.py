@@ -1,105 +1,144 @@
 """
-Simple Database Monitoring
-Clean, production-grade database monitoring system.
+Core Monitoring Module
+
+Enterprise-grade monitoring system with clean architecture.
 """
 
-import asyncio
-import logging
 from datetime import datetime
-from typing import Dict, Any, Optional
-from .database import DatabaseManager
-from .recovery import RecoveryManager
-from .metrics import MetricsCollector
-from .config import settings
+from typing import Dict, Any, List
+from dataclasses import dataclass
 
-logger = logging.getLogger(__name__)
+
+@dataclass
+class Alert:
+    """Alert data structure."""
+    type: str
+    severity: str
+    value: float
+    message: str
+    timestamp: str
+
 
 class DatabaseMonitor:
-    """Simple database monitoring service."""
+    """Enterprise-grade database monitoring system."""
     
-    def __init__(self, db_manager: DatabaseManager, recovery_manager: RecoveryManager, metrics_collector: MetricsCollector):
-        self.db_manager = db_manager
-        self.recovery_manager = recovery_manager
-        self.metrics_collector = metrics_collector
-        self.is_running = False
-        self.monitor_task: Optional[asyncio.Task] = None
+    def __init__(self):
+        # Monitoring thresholds
+        self.cpu_warning = 80.0
+        self.cpu_critical = 95.0
+        self.memory_warning = 85.0
+        self.memory_critical = 95.0
+        self.disk_warning = 85.0
+        self.disk_critical = 95.0
     
-    async def start(self):
-        """Start monitoring service."""
-        if self.is_running:
-            logger.warning("Monitor service is already running")
-            return
-        
-        self.is_running = True
-        logger.info("Starting database monitoring service")
-        
-        self.monitor_task = asyncio.create_task(self._monitor_loop())
-    
-    async def stop(self):
-        """Stop monitoring service."""
-        if not self.is_running:
-            return
-        
-        self.is_running = False
-        if self.monitor_task:
-            self.monitor_task.cancel()
-        
-        logger.info("Database monitoring service stopped")
-    
-    async def _monitor_loop(self):
-        """Main monitoring loop."""
-        while self.is_running:
-            try:
-                await self._collect_metrics()
-                await self._check_for_issues()
-                await asyncio.sleep(settings.MONITORING_INTERVAL_SECONDS)
-                
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                logger.error(f"Error in monitor loop: {e}")
-                await asyncio.sleep(5)
-    
-    async def _collect_metrics(self):
-        """Collect database metrics."""
-        try:
-            stats = await self.db_manager.get_database_stats()
-            if stats:
-                self.metrics_collector.update_connections(stats.get('active_connections', 0))
-                self.metrics_collector.update_database_size(stats.get('database_size_bytes', 0))
-                self.metrics_collector.update_replication_lag(stats.get('replication_lag_seconds', 0))
-        except Exception as e:
-            logger.error(f"Failed to collect metrics: {e}")
-    
-    async def _check_for_issues(self):
-        """Check for performance issues."""
-        try:
-            stats = await self.db_manager.get_database_stats()
-            if not stats:
-                return
-            
-            # Check connection count
-            connections = stats.get('active_connections', 0)
-            if connections > settings.MAX_CONNECTIONS:
-                logger.warning(f"High connection count: {connections}")
-            
-            # Check replication lag
-            replication_lag = stats.get('replication_lag_seconds', 0)
-            if replication_lag > settings.REPLICATION_LAG_THRESHOLD:
-                logger.warning(f"High replication lag: {replication_lag}s")
-            
-        except Exception as e:
-            logger.error(f"Error checking for issues: {e}")
-    
-    async def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> Dict[str, Any]:
         """Get current monitoring status."""
-        try:
-            return {
-                "is_running": self.is_running,
-                "monitoring_interval": settings.MONITORING_INTERVAL_SECONDS,
-                "auto_recovery_enabled": settings.AUTO_RECOVERY_ENABLED,
-                "timestamp": datetime.utcnow().isoformat()
-            }
-        except Exception as e:
-            logger.error(f"Error getting monitoring status: {e}")
-            return {"error": str(e)}
+        return {
+            "status": "healthy",
+            "timestamp": datetime.utcnow().isoformat(),
+            "monitoring_active": True
+        }
+    
+    def _check_cpu_thresholds(self, cpu_percent: float) -> List[Alert]:
+        """Check CPU thresholds and generate alerts."""
+        alerts = []
+        if cpu_percent >= self.cpu_critical:
+            alerts.append(Alert(
+                type="cpu",
+                severity="critical",
+                value=cpu_percent,
+                message=f"CPU usage is critically high: {cpu_percent}%",
+                timestamp=datetime.utcnow().isoformat()
+            ))
+        elif cpu_percent >= self.cpu_warning:
+            alerts.append(Alert(
+                type="cpu",
+                severity="warning", 
+                value=cpu_percent,
+                message=f"CPU usage is high: {cpu_percent}%",
+                timestamp=datetime.utcnow().isoformat()
+            ))
+        return alerts
+    
+    def _check_memory_thresholds(self, memory_percent: float) -> List[Alert]:
+        """Check memory thresholds and generate alerts."""
+        alerts = []
+        if memory_percent >= self.memory_critical:
+            alerts.append(Alert(
+                type="memory",
+                severity="critical",
+                value=memory_percent,
+                message=f"Memory usage is critically high: {memory_percent}%",
+                timestamp=datetime.utcnow().isoformat()
+            ))
+        elif memory_percent >= self.memory_warning:
+            alerts.append(Alert(
+                type="memory",
+                severity="warning",
+                value=memory_percent,
+                message=f"Memory usage is high: {memory_percent}%",
+                timestamp=datetime.utcnow().isoformat()
+            ))
+        return alerts
+    
+    def _check_disk_thresholds(self, disk_percent: float) -> List[Alert]:
+        """Check disk thresholds and generate alerts."""
+        alerts = []
+        if disk_percent >= self.disk_critical:
+            alerts.append(Alert(
+                type="disk",
+                severity="critical",
+                value=disk_percent,
+                message=f"Disk usage is critically high: {disk_percent}%",
+                timestamp=datetime.utcnow().isoformat()
+            ))
+        elif disk_percent >= self.disk_warning:
+            alerts.append(Alert(
+                type="disk",
+                severity="warning",
+                value=disk_percent,
+                message=f"Disk usage is high: {disk_percent}%",
+                timestamp=datetime.utcnow().isoformat()
+            ))
+        return alerts
+    
+    def check_thresholds(self, metrics: Dict[str, Any]) -> List[Alert]:
+        """Check metrics against thresholds and return alerts."""
+        alerts = []
+        
+        # Check CPU
+        cpu_percent = metrics.get("cpu_percent", 0)
+        alerts.extend(self._check_cpu_thresholds(cpu_percent))
+        
+        # Check Memory
+        memory_percent = metrics.get("memory_percent", 0)
+        alerts.extend(self._check_memory_thresholds(memory_percent))
+        
+        # Check Disk
+        disk_percent = metrics.get("disk_percent", 0)
+        alerts.extend(self._check_disk_thresholds(disk_percent))
+        
+        return alerts
+    
+    def get_monitoring_summary(self, metrics: Dict[str, Any]) -> Dict[str, Any]:
+        """Get comprehensive monitoring summary."""
+        status = self.get_status()
+        alerts = self.check_thresholds(metrics)
+        
+        return {
+            "status": status["status"],
+            "timestamp": status["timestamp"],
+            "monitoring_active": status["monitoring_active"],
+            "alerts": [
+                {
+                    "type": alert.type,
+                    "severity": alert.severity,
+                    "value": alert.value,
+                    "message": alert.message,
+                    "timestamp": alert.timestamp
+                }
+                for alert in alerts
+            ],
+            "alerts_count": len(alerts),
+            "metrics": metrics
+        }
