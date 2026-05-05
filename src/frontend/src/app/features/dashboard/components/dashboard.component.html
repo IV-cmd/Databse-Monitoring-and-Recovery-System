@@ -1,0 +1,99 @@
+<div class="dashboard-container">
+  <div class="dashboard-header">
+    <h1>Database Monitoring Dashboard</h1>
+    <button class="refresh-btn" (click)="refreshData()" [disabled]="loading">
+      <span class="loading-spinner" *ngIf="loading"></span>
+      Refresh
+    </button>
+  </div>
+
+  <div class="error-message" *ngIf="error">
+    {{ error }}
+  </div>
+
+  <div class="dashboard-grid" *ngIf="!loading && !error">
+    <!-- Health Status Card -->
+    <div class="card health-card">
+      <h2>System Health</h2>
+      <div class="health-status" *ngIf="healthData">
+        <div class="status-item">
+          <span class="status-label">Service:</span>
+          <span class="status-value">{{ healthData.service }}</span>
+        </div>
+        <div class="status-item">
+          <span class="status-label">Version:</span>
+          <span class="status-value">{{ healthData.version }}</span>
+        </div>
+        <div class="status-item">
+          <span class="status-label">Status:</span>
+          <span class="status-value" [class]="getStatusClass(healthData.status)">
+            {{ healthData.status }}
+          </span>
+        </div>
+        <div class="status-item">
+          <span class="status-label">Last Check:</span>
+          <span class="status-value">{{ healthData.timestamp | date:'medium' }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- System Metrics Card -->
+    <!-- Metrics Overview Card -->
+    <div class="card metrics-card">
+      <h2>System Metrics</h2>
+      <div class="metrics-overview" *ngIf="metricsData">
+        <div class="metric-item">
+          <span class="metric-label">CPU Usage:</span>
+          <span class="metric-value">{{ metricsData.current?.cpu_usage || 'N/A' }}%</span>
+        </div>
+        <div class="metric-item">
+          <span class="metric-label">Memory Usage:</span>
+          <span class="metric-value">{{ metricsData.current?.memory_usage || 'N/A' }}%</span>
+        </div>
+        <div class="metric-item">
+          <span class="metric-label">Disk Usage:</span>
+          <span class="metric-value">{{ metricsData.current?.disk_usage || 'N/A' }}%</span>
+        </div>
+        <div class="metric-item">
+          <span class="metric-label">Connections:</span>
+          <span class="metric-value">{{ metricsData.current?.connections || 'N/A' }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick Actions Card -->
+    <div class="card actions-card">
+      <h2>Quick Actions</h2>
+      <div class="action-buttons">
+        <button class="action-btn" routerLink="/monitoring">
+          View Monitoring
+        </button>
+        <button class="action-btn" routerLink="/recovery">
+          Recovery Operations
+        </button>
+        <button class="action-btn" routerLink="/settings">
+          Settings
+        </button>
+      </div>
+    </div>
+
+    <!-- Recent Activity Card -->
+    <div class="card activity-card">
+      <h2>Recent Activity</h2>
+      <div class="activity-list">
+        <div class="activity-item">
+          <span class="activity-time">2 min ago</span>
+          <span class="activity-desc">Health check completed</span>
+        </div>
+        <div class="activity-item">
+          <span class="activity-time">5 min ago</span>
+          <span class="activity-desc">Metrics collected</span>
+        </div>
+        <div class="activity-item">
+          <span class="activity-time">15 min ago</span>
+          <span class="activity-desc">System status updated</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
