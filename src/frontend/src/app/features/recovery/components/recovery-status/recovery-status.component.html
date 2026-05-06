@@ -1,0 +1,88 @@
+<div class="recovery-status">
+  <div class="header">
+    <h1>Recovery Status</h1>
+    <button class="refresh-btn" (click)="refreshStatus()" [disabled]="loading">
+      <span *ngIf="loading">⏳</span>
+      Refresh
+    </button>
+  </div>
+
+  <div class="error" *ngIf="error">{{ error }}</div>
+
+  <div class="content" *ngIf="!loading && operation">
+    <div class="status-card">
+      <div class="card-header">
+        <span class="operation-icon">{{ getTypeIcon(operation.type) }}</span>
+        <div class="operation-info">
+          <h2>{{ operation.type | titlecase }} Operation</h2>
+          <span class="operation-id">ID: {{ operation.id }}</span>
+        </div>
+        <span class="status-badge {{ getStatusClass(operation.status) }}">
+          {{ operation.status }}
+        </span>
+      </div>
+
+      <div class="progress-section" *ngIf="operation.status === 'running'">
+        <div class="progress-header">
+          <span>Progress</span>
+          <span class="progress-text">{{ operation.progress }}%</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" 
+               [style.width.%]="operation.progress"
+               [style.background]="getProgressColor(operation.progress)">
+          </div>
+        </div>
+      </div>
+
+      <div class="details-grid">
+        <div class="detail-item">
+          <label>Started</label>
+          <span>{{ formatDate(operation.startTime) }}</span>
+        </div>
+
+        <div class="detail-item" *ngIf="operation.endTime">
+          <label>Ended</label>
+          <span>{{ formatDate(operation.endTime) }}</span>
+        </div>
+
+        <div class="detail-item">
+          <label>Duration</label>
+          <span>{{ getDuration() }}</span>
+        </div>
+
+        <div class="detail-item">
+          <label>Type</label>
+          <span>{{ operation.type | titlecase }}</span>
+        </div>
+      </div>
+
+      <div class="description" *ngIf="operation.details">
+        <h3>Description</h3>
+        <p>{{ operation.details }}</p>
+      </div>
+
+      <div class="error-section" *ngIf="operation.errorMessage">
+        <h3>Error Details</h3>
+        <div class="error-message">
+          {{ operation.errorMessage }}
+        </div>
+      </div>
+
+      <div class="actions" *ngIf="operation.status === 'running' || operation.status === 'pending'">
+        <button class="cancel-btn" (click)="cancelOperation()">
+          ❌ Cancel Operation
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="loading" *ngIf="loading">
+    <span>⏳ Loading operation status...</span>
+  </div>
+
+  <div class="not-found" *ngIf="!loading && !operation && !error">
+    <span class="not-found-icon">📋</span>
+    <p>Operation not found</p>
+  </div>
+</div>
