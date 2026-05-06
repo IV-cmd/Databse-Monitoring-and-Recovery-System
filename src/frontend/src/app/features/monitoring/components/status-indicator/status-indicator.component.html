@@ -1,0 +1,19 @@
+<div class="status-indicator" 
+     [class]="getStatusClass()"
+     [attr.aria-label]="getAriaLabel()"
+     [attr.role]="'status'">
+  
+  <div class="status-content">
+    <div class="status-icon" *ngIf="showIcon">
+      <span class="material-icons" 
+            [class]="{'animated': animated}">{{ getStatusIcon() }}</span>
+    </div>
+    
+    <div class="status-text" *ngIf="showLabel">
+      <span class="status-label" *ngIf="label">{{ label }}</span>
+      <span class="status-value">{{ getStatusText() }}</span>
+    </div>
+  </div>
+  
+  <div class="status-pulse" *ngIf="animated && status === 'loading'"></div>
+</div>
