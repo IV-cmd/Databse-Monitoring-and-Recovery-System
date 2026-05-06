@@ -1,0 +1,55 @@
+<div class="metrics-chart">
+  <div class="chart-header">
+    <h3>{{ config.title }}</h3>
+    <div class="chart-stats">
+      <div class="stat-item">
+        <span class="stat-label">Current:</span>
+        <span class="stat-value">{{ formatValue(getLatestValue()) }}</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">Average:</span>
+        <span class="stat-value">{{ formatValue(getAverageValue()) }}</span>
+      </div>
+      <div class="stat-item trend" [class]="getTrendClass()">
+        <span class="material-icons">{{ getTrendIcon() }}</span>
+        <span class="stat-label">Trend:</span>
+        <span class="stat-value">{{ getTrend() }}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="chart-container" *ngIf="metrics.length > 0; else noDataTemplate">
+    <div class="chart-wrapper" [style.height]="height + 'px'">
+      <!-- Chart will be rendered here by chart library -->
+      <div class="chart-placeholder">
+        <div class="chart-line" 
+             *ngFor="let point of metrics; let i = index"
+             [style.left]="(i / (metrics.length - 1) * 100) + '%'"
+             [style.bottom]="((point.value / getMaxValue()) * 80) + '%'">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="chart-details" *ngIf="showLegend">
+    <div class="detail-item">
+      <span class="detail-label">Min:</span>
+      <span class="detail-value">{{ formatValue(getMinValue()) }}</span>
+    </div>
+    <div class="detail-item">
+      <span class="detail-label">Max:</span>
+      <span class="detail-value">{{ formatValue(getMaxValue()) }}</span>
+    </div>
+    <div class="detail-item">
+      <span class="detail-label">Data Points:</span>
+      <span class="detail-value">{{ metrics.length }}</span>
+    </div>
+  </div>
+
+  <ng-template #noDataTemplate>
+    <div class="no-data">
+      <span class="material-icons">show_chart</span>
+      <p>No data available</p>
+    </div>
+  </ng-template>
+</div>
