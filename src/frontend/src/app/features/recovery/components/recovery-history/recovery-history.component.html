@@ -1,0 +1,76 @@
+<div class="recovery-history">
+  <div class="header">
+    <h1>Recovery History</h1>
+    <div class="filters">
+      <select [(ngModel)]="dateRange">
+        <option value="7">Last 7 days</option>
+        <option value="30">Last 30 days</option>
+        <option value="90">Last 90 days</option>
+        <option value="all">All time</option>
+      </select>
+      <select [(ngModel)]="selectedType">
+        <option value="all">All types</option>
+        <option value="backup">Backup</option>
+        <option value="restore">Restore</option>
+        <option value="repair">Repair</option>
+        <option value="rebuild">Rebuild</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="error" *ngIf="error">{{ error }}</div>
+
+  <div class="content" *ngIf="!loading">
+    <div class="stats">
+      <div class="stat">
+        <span>Total</span>
+        <span>{{ totalOperations }}</span>
+      </div>
+      <div class="stat success">
+        <span>Success Rate</span>
+        <span>{{ successRate | number:'1.1-1' }}%</span>
+      </div>
+    </div>
+
+    <div class="sections">
+      <div class="section">
+        <h3>Operations by Type</h3>
+        <div class="type-list">
+          <div class="type-item" *ngFor="let item of operationsByType | keyvalue">
+            <span>{{ getTypeIcon(item.key) }} {{ item.key | titlecase }}</span>
+            <span>{{ item.value }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3>Status Breakdown</h3>
+        <div class="status-list">
+          <div class="status-item" 
+               *ngFor="let item of operationsByStatus | keyvalue">
+            <span class="status-dot {{ getStatusClass(item.key) }}"></span>
+            <span>{{ item.key | titlecase }}</span>
+            <span>{{ item.value }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="recent">
+      <h3>Recent Operations</h3>
+      <div class="recent-list">
+        <div class="recent-item" 
+             *ngFor="let operation of filteredOperations.slice(-5).reverse()">
+          <span>{{ getTypeIcon(operation.type) }} {{ operation.type | titlecase }}</span>
+          <span>{{ formatDate(operation.startTime) }}</span>
+          <span class="status {{ getStatusClass(operation.status) }}">{{ operation.status }}</span>
+        </div>
+        <div class="empty" *ngIf="filteredOperations.length === 0">No operations found</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="loading" *ngIf="loading">
+    <span>⏳ Loading history...</span>
+  </div>
+</div>
