@@ -1,0 +1,61 @@
+<div class="recovery-list">
+  <div class="header">
+    <h1>Recovery Operations</h1>
+    <div class="filters">
+      <select [(ngModel)]="filterType" (change)="onFilterChange()">
+        <option value="all">All Types</option>
+        <option value="backup">Backup</option>
+        <option value="restore">Restore</option>
+        <option value="repair">Repair</option>
+        <option value="rebuild">Rebuild</option>
+      </select>
+      <select [(ngModel)]="filterStatus" (change)="onFilterChange()">
+        <option value="all">All Status</option>
+        <option value="pending">Pending</option>
+        <option value="running">Running</option>
+        <option value="completed">Completed</option>
+        <option value="failed">Failed</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="error" *ngIf="error">{{ error }}</div>
+
+  <div class="content" *ngIf="!loading">
+    <div class="operations">
+      <div class="operation" 
+           *ngFor="let operation of paginatedOperations; trackBy: trackByOperationId">
+        <div class="op-header">
+          <span>{{ getTypeIcon(operation.type) }} {{ operation.type | titlecase }}</span>
+          <span class="status {{ getStatusClass(operation.status) }}">{{ operation.status }}</span>
+        </div>
+        <div class="progress" *ngIf="operation.status === 'running'">
+          <div class="bar" [style.width.%]="operation.progress"></div>
+          <span>{{ operation.progress }}%</span>
+        </div>
+        <div class="details">
+          <small>ID: {{ operation.id }}</small>
+          <div>{{ formatDate(operation.startTime) }}</div>
+          <div *ngIf="operation.details">{{ operation.details }}</div>
+          <div class="error" *ngIf="operation.errorMessage">{{ operation.errorMessage }}</div>
+        </div>
+        <div class="op-actions">
+          <button (click)="viewOperationDetails(operation.id)">👁️</button>
+          <button *ngIf="operation.status === 'running' || operation.status === 'pending'" 
+                  (click)="cancelOperation(operation.id)">❌</button>
+        </div>
+      </div>
+      <div class="empty" *ngIf="filteredOperations.length === 0">No operations found</div>
+    </div>
+
+    <div class="pagination" *ngIf="totalPages > 1">
+      <button (click)="onPageChange(currentPage - 1)" [disabled]="currentPage === 1">‹</button>
+      <span>Page {{ currentPage }} of {{ totalPages }}</span>
+      <button (click)="onPageChange(currentPage + 1)" [disabled]="currentPage === totalPages">›</button>
+    </div>
+  </div>
+
+  <div class="loading" *ngIf="loading">
+    <span>⏳ Loading...</span>
+  </div>
+</div>
