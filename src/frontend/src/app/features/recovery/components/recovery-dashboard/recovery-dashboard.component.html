@@ -1,0 +1,91 @@
+<div class="recovery-dashboard">
+  <div class="header">
+    <h1>Recovery Dashboard</h1>
+    <button (click)="refreshData()" [disabled]="loading">
+      <span *ngIf="loading">⏳</span>
+      Refresh
+    </button>
+  </div>
+
+  <div class="error" *ngIf="error">{{ error }}</div>
+
+  <div class="content" *ngIf="!loading && !error">
+    <!-- Stats -->
+    <div class="card">
+      <h2>Statistics</h2>
+      <div class="stats" *ngIf="recoveryStats">
+        <div class="stat">
+          <span>Total</span>
+          <span>{{ recoveryStats.totalOperations }}</span>
+        </div>
+        <div class="stat success">
+          <span>Success</span>
+          <span>{{ recoveryStats.successfulOperations }}</span>
+        </div>
+        <div class="stat error">
+          <span>Failed</span>
+          <span>{{ recoveryStats.failedOperations }}</span>
+        </div>
+        <div class="stat running">
+          <span>Running</span>
+          <span>{{ recoveryStats.runningOperations }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="card">
+      <h2>Actions</h2>
+      <div class="actions">
+        <button (click)="startNewRecovery('backup')">💾 Backup</button>
+        <button (click)="startNewRecovery('restore')">🔄 Restore</button>
+        <button (click)="startNewRecovery('repair')">🔧 Repair</button>
+        <button (click)="startNewRecovery('rebuild')">🏗️ Rebuild</button>
+      </div>
+    </div>
+
+    <!-- Operations -->
+    <div class="card">
+      <h2>Operations</h2>
+      <div class="operations">
+        <div class="operation" 
+             *ngFor="let operation of recoveryOperations; trackBy: trackByOperationId">
+          <div class="op-header">
+            <span>{{ getTypeIcon(operation.type) }} {{ operation.type | titlecase }}</span>
+            <span class="status {{ getStatusClass(operation.status) }}">
+              {{ operation.status }}
+            </span>
+          </div>
+          
+          <div class="progress" *ngIf="operation.status === 'running'">
+            <div class="bar" 
+                 [style.width.%]="operation.progress"
+                 [style.background]="getProgressColor(operation.progress)">
+            </div>
+            <span>{{ operation.progress }}%</span>
+          </div>
+
+          <div class="details">
+            <small>ID: {{ operation.id }}</small>
+            <div *ngIf="operation.details">{{ operation.details }}</div>
+            <div class="error" *ngIf="operation.errorMessage">
+              {{ operation.errorMessage }}
+            </div>
+          </div>
+
+          <div class="op-actions">
+            <button (click)="viewOperationDetails(operation.id)">👁️</button>
+            <button *ngIf="operation.status === 'failed'" 
+                    (click)="retryOperation(operation.id)">🔄</button>
+            <button *ngIf="operation.status === 'running' || operation.status === 'pending'" 
+                    (click)="cancelOperation(operation.id)">❌</button>
+          </div>
+        </div>
+
+        <div class="empty" *ngIf="recoveryOperations.length === 0">
+          No operations found
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
