@@ -1,0 +1,62 @@
+<div class="recovery-form">
+  <div class="form-header">
+    <h2>Start Recovery Operation</h2>
+    <button class="close-btn" (click)="onCancel()" title="Cancel">✕</button>
+  </div>
+
+  <form class="recovery-form-content" (ngSubmit)="onSubmit()">
+    <!-- Recovery Type -->
+    <div class="form-group">
+      <label for="recovery-type">Recovery Type</label>
+      <select id="recovery-type" [(ngModel)]="formData.type" name="type">
+        <option *ngFor="let type of recoveryTypes" [value]="type.value">
+          {{ type.label }}
+        </option>
+      </select>
+    </div>
+
+    <!-- Reason -->
+    <div class="form-group">
+      <label for="recovery-reason">Reason *</label>
+      <input 
+        id="recovery-reason" 
+        type="text" 
+        [(ngModel)]="formData.reason" 
+        name="reason"
+        placeholder="Enter reason for recovery operation"
+        required>
+    </div>
+
+    <!-- Severity -->
+    <div class="form-group">
+      <label for="recovery-severity">Severity</label>
+      <select id="recovery-severity" [(ngModel)]="formData.severity" name="severity">
+        <option *ngFor="let level of severityLevels" [value]="level.value">
+          {{ level.label }}
+        </option>
+      </select>
+    </div>
+
+    <!-- Details -->
+    <div class="form-group">
+      <label for="recovery-details">Details</label>
+      <textarea 
+        id="recovery-details" 
+        [(ngModel)]="formData.details" 
+        name="details"
+        placeholder="Additional details (optional)"
+        rows="3">
+      </textarea>
+    </div>
+
+    <!-- Form Actions -->
+    <div class="form-actions">
+      <button type="button" class="btn-secondary" (click)="resetForm()">
+        Reset
+      </button>
+      <button type="submit" class="btn-primary" [disabled]="!isFormValid()">
+        {{ getTypeIcon(formData.type) }} Start Recovery
+      </button>
+    </div>
+  </form>
+</div>
