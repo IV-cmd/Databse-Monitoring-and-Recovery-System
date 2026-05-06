@@ -1,0 +1,49 @@
+<div class="alerts-panel">
+  <div class="panel-header">
+    <h3>System Alerts</h3>
+    <div class="panel-actions" *ngIf="showFilters">
+      <button class="filter-btn" [class]="{'active': activeFilter === 'all'}" (click)="activeFilter = 'all'">
+        All ({{ getFilteredAlerts().length }})
+      </button>
+      <button class="filter-btn" [class]="{'active': activeFilter === 'critical'}" (click)="activeFilter = 'critical'">
+        Critical ({{ getAlertCountBySeverity('critical') }})
+      </button>
+      <button class="filter-btn" [class]="{'active': activeFilter === 'high'}" (click)="activeFilter = 'high'">
+        High ({{ getAlertCountBySeverity('high') }})
+      </button>
+      <button class="clear-all-btn" (click)="clearAllAlerts()" *ngIf="alerts.length > 0">
+        Clear All
+      </button>
+    </div>
+  </div>
+
+  <div class="alerts-container" *ngIf="getFilteredAlerts().length > 0; else noAlertsTemplate">
+    <div class="alert-item" 
+         *ngFor="let alert of getFilteredAlerts()" 
+         [class]="'alert-' + alert.severity">
+      <div class="alert-icon">
+        <span class="material-icons">{{ getSeverityIcon(alert.severity) }}</span>
+      </div>
+      <div class="alert-content">
+        <div class="alert-header">
+          <span class="alert-type">{{ alert.type }}</span>
+          <span class="alert-timestamp">{{ alert.timestamp | date:'short' }}</span>
+          <button class="dismiss-btn" (click)="dismissAlert(alert.id)" title="Dismiss">
+            ×
+          </button>
+        </div>
+        <div class="alert-message">{{ alert.message }}</div>
+        <div class="alert-source" *ngIf="alert.source">
+          <small>Source: {{ alert.source }}</small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <ng-template #noAlertsTemplate>
+    <div class="no-alerts">
+      <span class="material-icons">check_circle</span>
+      <p>No active alerts</p>
+    </div>
+  </ng-template>
+</div>
