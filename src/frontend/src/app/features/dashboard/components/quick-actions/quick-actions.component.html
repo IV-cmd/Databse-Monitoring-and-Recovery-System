@@ -1,0 +1,32 @@
+<div class="quick-actions">
+  <h3 *ngIf="title">{{ title }}</h3>
+  
+  <div class="actions-container" 
+       [class]="'layout-' + layout">
+    <div class="action-item" 
+         *ngFor="let action of actions"
+         [class]="getActionClass(action)"
+         (click)="executeAction(action)"
+         [attr.disabled]="action.disabled"
+         [attr.aria-label]="action.description || action.label">
+      
+      <div class="action-icon">
+        <span class="material-icons">{{ action.icon }}</span>
+      </div>
+      
+      <div class="action-content">
+        <div class="action-label">{{ action.label }}</div>
+        <div class="action-description" *ngIf="showDescriptions && action.description">
+          {{ action.description }}
+        </div>
+        <div class="action-badge" *ngIf="action.badge">
+          {{ action.badge }}
+        </div>
+      </div>
+      
+      <div class="action-arrow" *ngIf="!action.disabled">
+        <span class="material-icons">arrow_forward</span>
+      </div>
+    </div>
+  </div>
+</div>
