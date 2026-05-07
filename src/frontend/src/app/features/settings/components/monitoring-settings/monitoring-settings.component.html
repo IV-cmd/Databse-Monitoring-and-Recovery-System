@@ -1,0 +1,172 @@
+<div class="monitoring-settings">
+  <div class="form-header">
+    <h2>Monitoring Settings</h2>
+  </div>
+
+  <form class="settings-form">
+    <div class="form-section">
+      <h4>General Monitoring</h4>
+      
+      <div class="form-group">
+        <label for="intervalSeconds">Monitoring Interval (seconds)</label>
+        <input 
+          id="intervalSeconds" 
+          type="number" 
+          [(ngModel)]="config.intervalSeconds" 
+          name="intervalSeconds"
+          min="5" 
+          max="300"
+          class="form-control" />
+      </div>
+
+      <div class="form-group">
+        <label class="checkbox-label">
+          <input 
+            type="checkbox" 
+            [(ngModel)]="config.autoRecoveryEnabled" 
+            name="autoRecoveryEnabled" />
+          Auto Recovery
+        </label>
+      </div>
+
+      <div class="form-group">
+        <label for="maxRecoveryAttempts">Max Recovery Attempts</label>
+        <input 
+          id="maxRecoveryAttempts" 
+          type="number" 
+          [(ngModel)]="config.maxRecoveryAttempts" 
+          name="maxRecoveryAttempts"
+          min="1" 
+          max="10"
+          class="form-control" />
+      </div>
+    </div>
+
+    <div class="form-section">
+      <h4>Thresholds</h4>
+      
+      <div class="thresholds-grid">
+        <div class="form-group">
+          <label for="cpuWarning">CPU Warning (%)</label>
+          <input 
+            id="cpuWarning"
+            type="number" 
+            [(ngModel)]="config.cpuWarning" 
+            name="cpuWarning"
+            min="0" 
+            max="100"
+            class="form-control" />
+        </div>
+
+        <div class="form-group">
+          <label for="cpuCritical">CPU Critical (%)</label>
+          <input 
+            id="cpuCritical"
+            type="number" 
+            [(ngModel)]="config.cpuCritical" 
+            name="cpuCritical"
+            min="0" 
+            max="100"
+            class="form-control" />
+        </div>
+
+        <div class="form-group">
+          <label for="memoryWarning">Memory Warning (%)</label>
+          <input 
+            id="memoryWarning"
+            type="number" 
+            [(ngModel)]="config.memoryWarning" 
+            name="memoryWarning"
+            min="0" 
+            max="100"
+            class="form-control" />
+        </div>
+
+        <div class="form-group">
+          <label for="memoryCritical">Memory Critical (%)</label>
+          <input 
+            id="memoryCritical"
+            type="number" 
+            [(ngModel)]="config.memoryCritical" 
+            name="memoryCritical"
+            min="0" 
+            max="100"
+            class="form-control" />
+        </div>
+
+        <div class="form-group">
+          <label for="diskWarning">Disk Warning (%)</label>
+          <input 
+            id="diskWarning"
+            type="number" 
+            [(ngModel)]="config.diskWarning" 
+            name="diskWarning"
+            min="0" 
+            max="100"
+            class="form-control" />
+        </div>
+
+        <div class="form-group">
+          <label for="diskCritical">Disk Critical (%)</label>
+          <input 
+            id="diskCritical"
+            type="number" 
+            [(ngModel)]="config.diskCritical" 
+            name="diskCritical"
+            min="0" 
+            max="100"
+            class="form-control" />
+        </div>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <h4>Database Limits</h4>
+      
+      <div class="form-group">
+        <label for="maxConnections">Max Connections</label>
+        <input 
+          id="maxConnections" 
+          type="number" 
+          [(ngModel)]="config.maxConnections" 
+          name="maxConnections"
+          min="1" 
+          max="1000"
+          class="form-control" />
+      </div>
+
+      <div class="form-group">
+        <label for="replicationLagThreshold">Replication Lag Threshold (seconds)</label>
+        <input 
+          id="replicationLagThreshold" 
+          type="number" 
+          [(ngModel)]="config.replicationLagThreshold" 
+          name="replicationLagThreshold"
+          min="1" 
+          max="300"
+          class="form-control" />
+      </div>
+
+      <div class="form-group">
+        <label for="databaseSizeThresholdGb">Database Size Threshold (GB)</label>
+        <input 
+          id="databaseSizeThresholdGb" 
+          type="number" 
+          [(ngModel)]="config.databaseSizeThresholdGb" 
+          name="databaseSizeThresholdGb"
+          min="1" 
+          max="1000"
+          class="form-control" />
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button type="button" class="btn btn-primary" (click)="saveSettings()">
+        Save Settings
+      </button>
+      <button type="button" class="btn btn-secondary" (click)="resetSettings()">
+        Reset to Defaults
+      </button>
+    </div>
+  </form>
+</div>
