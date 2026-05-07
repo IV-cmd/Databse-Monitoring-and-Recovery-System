@@ -1,0 +1,145 @@
+<div class="database-settings">
+  <div class="form-header">
+    <h2>Database Settings</h2>
+  </div>
+
+  <form class="database-settings-form" (ngSubmit)="saveSettings()">
+    <!-- Database Connection Section -->
+    <div class="form-section">
+      <h4>Database Connection</h4>
+      
+      <div class="form-group">
+        <label for="primaryUrl">Primary Database URL</label>
+        <input 
+          id="primaryUrl" 
+          type="text" 
+          [(ngModel)]="config.primaryUrl" 
+          name="primaryUrl"
+          placeholder="postgresql://localhost:5432/monitoring_db"
+          class="form-control" />
+      </div>
+
+      <div class="form-group">
+        <label for="replicaUrl">Replica Database URL</label>
+        <input 
+          id="replicaUrl" 
+          type="text" 
+          [(ngModel)]="config.replicaUrl" 
+          name="replicaUrl"
+          placeholder="postgresql://replica:5432/monitoring_db"
+          class="form-control" />
+      </div>
+    </div>
+
+    <!-- SSL Configuration Section -->
+    <div class="form-section">
+      <h4>SSL Configuration</h4>
+      
+      <div class="form-group">
+        <label class="checkbox-label">
+          <input 
+            type="checkbox" 
+            [(ngModel)]="config.sslEnabled" 
+            name="sslEnabled"
+            (change)="onSslToggle()" />
+          Enable SSL/TLS
+        </label>
+      </div>
+
+      <div class="ssl-section" *ngIf="config.sslEnabled">
+        <div class="form-group">
+          <label for="sslCertFile">SSL Certificate File</label>
+          <input 
+            id="sslCertFile" 
+            type="text" 
+            [(ngModel)]="config.sslCertFile" 
+            name="sslCertFile"
+            placeholder="/path/to/cert.pem"
+            class="form-control" />
+        </div>
+
+        <div class="form-group">
+          <label for="sslKeyFile">SSL Key File</label>
+          <input 
+            id="sslKeyFile" 
+            type="text" 
+            [(ngModel)]="config.sslKeyFile" 
+            name="sslKeyFile"
+            placeholder="/path/to/key.pem"
+            class="form-control" />
+        </div>
+
+        <div class="form-group">
+          <label for="sslCaFile">SSL CA File</label>
+          <input 
+            id="sslCaFile" 
+            type="text" 
+            [(ngModel)]="config.sslCaFile" 
+            name="sslCaFile"
+            placeholder="/path/to/ca.pem"
+            class="form-control" />
+        </div>
+
+        <div class="form-group">
+          <label for="sslVerify">SSL Verification</label>
+          <select id="sslVerify" [(ngModel)]="config.sslVerify" name="sslVerify" class="form-control">
+            <option *ngFor="let option of sslOptions" [value]="option.value">
+              {{ option.label }}
+            </option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Connection Pool Section -->
+    <div class="form-section">
+      <h4>Connection Pool</h4>
+      
+      <div class="form-group">
+        <label for="maxConnections">Max Connections</label>
+        <input 
+          id="maxConnections" 
+          type="number" 
+          [(ngModel)]="config.maxConnections" 
+          name="maxConnections"
+          min="1" 
+          max="1000"
+          class="form-control" />
+      </div>
+
+      <div class="form-group">
+        <label for="minConnections">Min Connections</label>
+        <input 
+          id="minConnections" 
+          type="number" 
+          [(ngModel)]="config.minConnections" 
+          name="minConnections"
+          min="1" 
+          max="100"
+          class="form-control" />
+      </div>
+
+      <div class="form-group">
+        <label for="commandTimeout">Command Timeout (seconds)</label>
+        <input 
+          id="commandTimeout" 
+          type="number" 
+          [(ngModel)]="config.commandTimeout" 
+          name="commandTimeout"
+          min="1" 
+          max="300"
+          class="form-control" />
+      </div>
+    </div>
+
+    <!-- Form Actions -->
+    <div class="form-actions">
+      <button type="button" class="btn btn-secondary" (click)="resetSettings()">
+        Reset to Defaults
+      </button>
+      <button type="submit" class="btn btn-primary">
+        Save Settings
+      </button>
+    </div>
+  </form>
+</div>
