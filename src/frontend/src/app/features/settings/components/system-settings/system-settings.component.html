@@ -1,0 +1,133 @@
+<div class="system-settings">
+  <div class="form-header">
+    <h2>System Settings</h2>
+  </div>
+
+  <form class="settings-form">
+    <div class="form-section">
+      <h4>Environment</h4>
+      
+      <div class="form-group">
+        <label for="environment">Environment</label>
+        <select id="environment" [(ngModel)]="config.environment" name="environment" class="form-control">
+          <option *ngFor="let env of environments" [value]="env.value">
+            {{ env.label }}
+          </option>
+        </select>
+      </div>
+      
+      <div class="form-group">
+        <label for="logLevel">Log Level</label>
+        <select id="logLevel" [(ngModel)]="config.logLevel" name="logLevel" class="form-control">
+          <option *ngFor="let level of logLevels" [value]="level.value">
+            {{ level.label }}
+          </option>
+        </select>
+      </div>
+    </div>
+    
+    <div class="form-section">
+      <h4>Application Settings</h4>
+      
+      <div class="form-group">
+        <label class="checkbox-label">
+          <input 
+            type="checkbox" 
+            [(ngModel)]="config.debugMode" 
+            name="debugMode" />
+          Debug Mode
+        </label>
+      </div>
+      
+      <div class="form-group">
+        <label class="checkbox-label">
+          <input 
+            type="checkbox" 
+            [(ngModel)]="config.maintenanceMode" 
+            name="maintenanceMode" />
+          Maintenance Mode
+        </label>
+      </div>
+      
+      <div class="form-group">
+        <label for="sessionTimeout">Session Timeout (minutes)</label>
+        <input 
+          id="sessionTimeout" 
+          type="number" 
+          [(ngModel)]="config.sessionTimeout" 
+          name="sessionTimeout"
+          min="5"
+          max="1440"
+          class="form-control" />
+      </div>
+    </div>
+    
+    <div class="form-section">
+      <h4>Localization</h4>
+      
+      <div class="form-group">
+        <label for="timezone">Timezone</label>
+        <select id="timezone" [(ngModel)]="config.timezone" name="timezone" class="form-control">
+          <option *ngFor="let tz of timezones" [value]="tz.value">
+            {{ tz.label }}
+          </option>
+        </select>
+      </div>
+      
+      <div class="form-group">
+        <label for="dateFormat">Date Format</label>
+        <select id="dateFormat" [(ngModel)]="config.dateFormat" name="dateFormat" class="form-control">
+          <option *ngFor="let format of dateFormats" [value]="format.value">
+            {{ format.label }}
+          </option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="language">Language</label>
+        <select id="language" [(ngModel)]="config.language" name="language" class="form-control">
+          <option *ngFor="let lang of languages" [value]="lang.value">
+            {{ lang.label }}
+          </option>
+        </select>
+      </div>
+    </div>
+    
+    <div class="form-section">
+      <h4>Security</h4>
+      
+      <div class="form-group">
+        <label for="maxLoginAttempts">Max Login Attempts</label>
+        <input 
+          id="maxLoginAttempts" 
+          type="number" 
+          [(ngModel)]="config.maxLoginAttempts" 
+          name="maxLoginAttempts"
+          min="1"
+          max="10"
+          class="form-control" />
+      </div>
+      
+      <div class="form-group">
+        <label for="passwordMinLength">Password Min Length</label>
+        <input 
+          id="passwordMinLength" 
+          type="number" 
+          [(ngModel)]="config.passwordMinLength" 
+          name="passwordMinLength"
+          min="6"
+          max="50"
+          class="form-control" />
+      </div>
+    </div>
+    
+    <div class="form-actions">
+      <button type="button" class="btn btn-primary" (click)="saveSettings()">
+        Save Settings
+      </button>
+      <button type="button" class="btn btn-secondary" (click)="resetSettings()">
+        Reset to Defaults
+      </button>
+    </div>
+  </form>
+</div>
