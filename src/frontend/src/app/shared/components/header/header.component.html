@@ -1,0 +1,23 @@
+<header class="app-header">
+  <div class="header-content">
+    <div class="logo">
+      <h1>Database Monitor</h1>
+    </div>
+    
+    <nav class="nav-menu">
+      <ul>
+        <li *ngFor="let item of getNavigationItems()">
+          <button 
+            (click)="navigateTo(item.route)" 
+            class="nav-btn"
+            [class.active]="isActive(item.route)"
+            [attr.aria-label]="item.label + ' navigation'"
+          >
+            <span class="nav-icon">{{ item.icon }}</span>
+            <span class="nav-label">{{ item.label }}</span>
+          </button>
+        </li>
+      </ul>
+    </nav>
+  </div>
+</header>
