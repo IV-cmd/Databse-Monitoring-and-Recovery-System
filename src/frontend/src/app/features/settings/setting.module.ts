@@ -67,12 +67,7 @@ export interface NotificationConfig {
 }
 
 @NgModule({
-  declarations: [
-    DatabaseSettingsComponent,
-    MonitoringSettingsComponent,
-    NotificationSettingsComponent,
-    SystemSettingsComponent
-  ],
+  declarations: [],
   imports: [
     CommonModule,
     FormsModule,
@@ -84,11 +79,6 @@ export interface NotificationConfig {
       { path: 'notifications', component: NotificationSettingsComponent }
     ])
   ],
-  exports: [
-    DatabaseSettingsComponent,
-    MonitoringSettingsComponent,
-    NotificationSettingsComponent,
-    SystemSettingsComponent
-  ]
+  exports: []
 })
 export class SettingsModule { }

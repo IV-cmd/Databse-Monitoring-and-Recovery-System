@@ -8,13 +8,12 @@ import { MetricsChartComponent } from './components/metrics-chart/metrics-chart.
 import { StatusIndicatorComponent } from './components/status-indicator/status-indicator.component';
 
 @NgModule({
-  declarations: [
+  declarations: [],
+  imports: [
     MonitoringComponent,
     AlertsPanelComponent,
     MetricsChartComponent,
-    StatusIndicatorComponent
-  ],
-  imports: [
+    StatusIndicatorComponent,
     CommonModule,
     RouterModule.forChild([
       { path: '', component: MonitoringComponent }

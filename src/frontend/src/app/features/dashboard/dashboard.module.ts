@@ -5,11 +5,10 @@ import { DashboardComponent } from './components/dashboard.component';
 import { QuickActionsComponent } from './components/quick-actions/quick-actions.component';
 
 @NgModule({
-  declarations: [
-    DashboardComponent,
-    QuickActionsComponent
-  ],
+  declarations: [],
   imports: [
+    DashboardComponent,
+    QuickActionsComponent,
     CommonModule,
     RouterModule.forChild([
       { path: '', component: DashboardComponent },

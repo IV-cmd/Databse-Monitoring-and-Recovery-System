@@ -8,14 +8,13 @@ import { RecoveryStatusComponent } from './components/recovery-status/recovery-s
 import { RecoveryHistoryComponent } from './components/recovery-history/recovery-history.component';
 
 @NgModule({
-  declarations: [
+  declarations: [],
+  imports: [
     RecoveryDashboardComponent,
     RecoveryFormComponent,
     RecoveryListComponent,
     RecoveryStatusComponent,
-    RecoveryHistoryComponent
-  ],
-  imports: [
+    RecoveryHistoryComponent,
     CommonModule,
     RouterModule.forChild([
       { path: '', component: RecoveryDashboardComponent },
