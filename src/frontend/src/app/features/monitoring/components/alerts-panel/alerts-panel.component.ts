@@ -21,6 +21,8 @@ export class AlertsPanelComponent {
   @Input() alerts: Alert[] = [];
   @Input() maxAlerts: number = 10;
   @Input() showFilters: boolean = true;
+  
+  activeFilter: 'all' | 'low' | 'medium' | 'high' | 'critical' = 'all';
 
   getSeverityClass(severity: string): string {
     switch (severity) {
