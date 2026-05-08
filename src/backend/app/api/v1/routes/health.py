@@ -19,7 +19,7 @@ logger = get_logger(__name__)
 class PostgreSQLAuthConfig:
     def __init__(self):
         self.ssl_context = self._create_ssl_context()
-        self.connection_timeout = settings.DB_CONNECTION_TIMEOUT
+        self.connection_timeout = settings.DB_COMMAND_TIMEOUT
         self.command_timeout = settings.DB_COMMAND_TIMEOUT
         self.max_connections = settings.DB_MAX_CONNECTIONS
         self.min_connections = settings.DB_MIN_CONNECTIONS
