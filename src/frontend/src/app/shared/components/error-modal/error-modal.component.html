@@ -1,0 +1,35 @@
+<div class="modal-overlay" *ngIf="isVisible" (click)="onBackdropClick($event)">
+  <div class="modal-container" [ngClass]="modalClass">
+    <div class="modal-header">
+      <div class="modal-title">
+        <span class="modal-icon">{{ icon }}</span>
+        <h3>{{ errorData?.title || 'Error' }}</h3>
+      </div>
+      <button 
+        *ngIf="errorData?.showCloseButton !== false"
+        class="close-btn" 
+        (click)="onClose()"
+        aria-label="Close modal"
+      >
+        ×
+      </button>
+    </div>
+    
+    <div class="modal-body">
+      <p>{{ errorData?.message || 'An error occurred' }}</p>
+    </div>
+    
+    <div class="modal-footer">
+      <button 
+        *ngIf="errorData?.type === 'error'"
+        class="btn btn-retry" 
+        (click)="onRetry()"
+      >
+        Retry
+      </button>
+      <button class="btn btn-close" (click)="onClose()">
+        {{ errorData?.showCloseButton === false ? 'OK' : 'Close' }}
+      </button>
+    </div>
+  </div>
+</div>
