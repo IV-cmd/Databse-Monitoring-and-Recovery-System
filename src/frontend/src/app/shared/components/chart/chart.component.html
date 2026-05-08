@@ -1,0 +1,36 @@
+<div class="chart-wrapper" [ngClass]="chartClass" [style]="chartStyle">
+  <!-- Chart Header -->
+  <div *ngIf="config.title || config.subtitle" class="chart-header">
+    <h3 *ngIf="config.title" class="chart-title">{{ config.title }}</h3>
+    <p *ngIf="config.subtitle" class="chart-subtitle">{{ config.subtitle }}</p>
+  </div>
+
+  <!-- Chart Canvas -->
+  <div class="chart-canvas-container">
+    <canvas 
+      class="chart-canvas"
+      (click)="onCanvasClick($event)"
+    ></canvas>
+  </div>
+
+  <!-- Chart Legend -->
+  <div *ngIf="config.showLegend && config.data && config.data.length > 0" class="chart-legend">
+    <div 
+      *ngFor="let point of config.data; let i = index" 
+      class="legend-item"
+    >
+      <div 
+        class="legend-color" 
+        [style.background-color]="getColorForIndex(i)"
+      ></div>
+      <span class="legend-label">{{ point.label }}</span>
+      <span class="legend-value">{{ point.value }}{{ config.unit || '' }}</span>
+    </div>
+  </div>
+
+  <!-- Loading State -->
+  <div *ngIf="!config.data || config.data.length === 0" class="chart-empty">
+    <div class="empty-icon">📊</div>
+    <div class="empty-message">No data available</div>
+  </div>
+</div>
