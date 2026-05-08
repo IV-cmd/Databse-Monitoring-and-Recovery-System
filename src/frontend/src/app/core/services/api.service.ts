@@ -11,16 +11,26 @@ export interface ApiResponse<T> {
 
 export interface HealthResponse {
   status: string;
-  message: string;
-  components: any;
+  service: string;
+  version: string;
   timestamp?: string;
 }
 
 export interface MetricsResponse {
   timestamp: string;
   current: {
-    database: any;
-    system: any;
+    database: {
+      connections: number;
+      cpu_usage: number;
+      memory_usage: number;
+      disk_usage: number;
+    };
+    system: {
+      cpu_usage: number;
+      memory_usage: number;
+      disk_usage: number;
+      connections: number;
+    };
   };
 }
 
@@ -38,13 +48,14 @@ export interface RecoveryRequest {
   severity: string;
 }
 
-const API_BASE = '/api/v1';
+const API_BASE = 'http://localhost:8000/api/v1';
 
 export class ApiService {
   private http = inject(HttpClient);
 
   // Health endpoints
   getHealth(): Observable<HealthResponse> {
+    console.log('🔍 ApiService: Making health check request to:', `${API_BASE}/health/`);
     return this.http.get<HealthResponse>(`${API_BASE}/health/`).pipe(
       catchError(handleError)
     );
@@ -58,6 +69,7 @@ export class ApiService {
 
   // Metrics endpoints
   getCurrentMetrics(): Observable<MetricsResponse> {
+    console.log('📊 ApiService: Making metrics request to:', `${API_BASE}/metrics/current`);
     return this.http.get<MetricsResponse>(`${API_BASE}/metrics/current`).pipe(
       catchError(handleError)
     );
