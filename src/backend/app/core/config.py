@@ -64,7 +64,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=True,
-        extra="forbid"
+        extra="allow"
     )
 
 # Create global settings instance
