@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ApiService } from '../../../core/services/api.service';
+import { AlertsPanelComponent } from './alerts-panel/alerts-panel.component';
 
 export interface MonitoringData {
   status: string;
@@ -20,7 +21,7 @@ export interface Alert {
 @Component({
   selector: 'app-monitoring',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, AlertsPanelComponent],
   templateUrl: './monitoring.component.html',
   styleUrls: ['./monitoring.component.scss']
 })
@@ -29,6 +30,7 @@ export class MonitoringComponent implements OnInit {
   alerts: Alert[] = [];
   loading = true;
   error: string | null = null;
+  metricsData: any = null;
 
   constructor(private apiService: ApiService) {}
 
@@ -43,6 +45,7 @@ export class MonitoringComponent implements OnInit {
     this.apiService.getMonitoringStatus().subscribe({
       next: (data) => {
         this.monitoringData = data;
+        this.metricsData = data.metrics;
         this.loading = false;
       },
       error: (err: any) => {

@@ -1,0 +1,73 @@
+<div class="monitoring-container">
+  <div class="monitoring-header">
+    <h1>System Monitoring</h1>
+    <button class="refresh-btn" (click)="refreshData()" [disabled]="loading">
+      <span class="loading-spinner" *ngIf="loading"></span>
+      Refresh
+    </button>
+  </div>
+
+  <div class="error-message" *ngIf="error">
+    {{ error }}
+  </div>
+
+  <div class="monitoring-grid" *ngIf="!loading && !error">
+    <!-- Alerts Panel -->
+    <app-alerts-panel [alerts]="alerts" [maxAlerts]="10" [showFilters]="true"></app-alerts-panel>
+
+    <!-- Metrics Overview -->
+    <div class="card metrics-card">
+      <h2>Real-time Metrics</h2>
+      <div class="metrics-grid" *ngIf="metricsData">
+        <div class="metric-item">
+          <span class="metric-label">Database Connections:</span>
+          <span class="metric-value">{{ metricsData.current?.database?.connections || 'N/A' }}</span>
+        </div>
+        <div class="metric-item">
+          <span class="metric-label">Database CPU:</span>
+          <span class="metric-value">{{ metricsData.current?.database?.cpu_usage || 'N/A' }}%</span>
+        </div>
+        <div class="metric-item">
+          <span class="metric-label">Database Memory:</span>
+          <span class="metric-value">{{ metricsData.current?.database?.memory_usage || 'N/A' }}%</span>
+        </div>
+        <div class="metric-item">
+          <span class="metric-label">Database Disk:</span>
+          <span class="metric-value">{{ metricsData.current?.database?.disk_usage || 'N/A' }}%</span>
+        </div>
+        <div class="metric-item">
+          <span class="metric-label">System CPU:</span>
+          <span class="metric-value">{{ metricsData.current?.system?.cpu_usage || 'N/A' }}%</span>
+        </div>
+        <div class="metric-item">
+          <span class="metric-label">System Memory:</span>
+          <span class="metric-value">{{ metricsData.current?.system?.memory_usage || 'N/A' }}%</span>
+        </div>
+        <div class="metric-item">
+          <span class="metric-label">System Disk:</span>
+          <span class="metric-value">{{ metricsData.current?.system?.disk_usage || 'N/A' }}%</span>
+        </div>
+        <div class="metric-item">
+          <span class="metric-label">Active Connections:</span>
+          <span class="metric-value">{{ metricsData.current?.system?.connections || 'N/A' }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="card actions-card">
+      <h2>Quick Actions</h2>
+      <div class="action-buttons">
+        <button class="action-btn" routerLink="/dashboard">
+          View Dashboard
+        </button>
+        <button class="action-btn" routerLink="/recovery">
+          Recovery Operations
+        </button>
+        <button class="action-btn" routerLink="/settings">
+          Settings
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
