@@ -3,7 +3,7 @@ Simple Database Service
 Clean, production-grade database operations.
 """
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from datetime import datetime
 from ..repositories.database_repo import DatabaseRepository
 
