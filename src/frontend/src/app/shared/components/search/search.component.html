@@ -1,0 +1,145 @@
+<div class="search-container" [ngClass]="searchClass" (keydown)="onKeydown($event)">
+  <!-- Search Input -->
+  <div class="search-input-wrapper">
+    <div class="search-icon">🔍</div>
+    <input
+      type="text"
+      class="search-input"
+      [placeholder]="searchPlaceholder"
+      [(ngModel)]="searchValue"
+      (input)="onSearchInput()"
+      (focus)="showFilterPanel = false"
+    />
+    
+    <!-- Clear Button -->
+    <button
+      *ngIf="showClearButton"
+      class="search-clear"
+      (click)="onClearSearch()"
+      aria-label="Clear search"
+    >
+      ×
+    </button>
+  </div>
+
+  <!-- Filter Button -->
+  <div *ngIf="config.showFilters" class="search-filters">
+    <button
+      class="filter-toggle"
+      [class.active]="showFilterPanel"
+      (click)="toggleFilterPanel()"
+    >
+      <span class="filter-icon">🎯</span>
+      <span class="filter-text">Filters</span>
+      <span *ngIf="hasActiveFilters" class="filter-count">
+        {{ getActiveFilterCount() }}
+      </span>
+    </button>
+
+    <!-- Clear Filters Button -->
+    <button
+      *ngIf="hasActiveFilters"
+      class="filter-clear"
+      (click)="onClearFilters()"
+      title="Clear all filters"
+    >
+      Clear Filters
+    </button>
+  </div>
+
+  <!-- Filter Panel -->
+  <div
+    *ngIf="showFilterPanel && config.showFilters"
+    class="filter-panel"
+    (clickOutside)="onClickOutside()"
+  >
+    <div class="filter-header">
+      <h4>Filter Results</h4>
+      <button
+        *ngIf="hasActiveFilters"
+        class="clear-all-btn"
+        (click)="onClearAll()"
+      >
+        Clear All
+      </button>
+    </div>
+
+    <div class="filter-content">
+      <div
+        *ngFor="let filter of config.filters"
+        class="filter-item"
+        [class.active]="isFilterActive(filter.field)"
+      >
+        <label class="filter-label" [for]="'filter-' + filter.field">
+          {{ filter.field.charAt(0).toUpperCase() + filter.field.slice(1) }}
+        </label>
+        
+        <!-- Text Input -->
+        <input
+          *ngIf="filter.operator === 'contains' || filter.operator === 'startsWith'"
+          type="text"
+          class="filter-input"
+          [id]="'filter-' + filter.field"
+          [placeholder]="'Enter ' + filter.field"
+          [value]="getFilterValue(filter.field)"
+          (input)="onFilterChange(filter, $event)"
+        />
+
+        <!-- Select Dropdown -->
+        <select
+          *ngIf="filter.operator === 'eq'"
+          class="filter-select"
+          [id]="'filter-' + filter.field"
+          [value]="getFilterValue(filter.field)"
+          (change)="onFilterChange(filter, $event)"
+        >
+          <option value="">All {{ filter.field }}</option>
+          <option
+            *ngFor="let option of getFilterOptions(filter)"
+            [value]="option"
+            [selected]="getFilterValue(filter.field) === option"
+          >
+            {{ option.charAt(0).toUpperCase() + option.slice(1) }}
+          </option>
+        </select>
+
+        <!-- Number Input -->
+        <input
+          *ngIf="filter.operator === 'gt' || filter.operator === 'gte' || filter.operator === 'lt' || filter.operator === 'lte'"
+          type="number"
+          class="filter-input"
+          [id]="'filter-' + filter.field"
+          [placeholder]="'Min ' + filter.field"
+          [value]="getFilterValue(filter.field)"
+          (input)="onFilterChange(filter, $event)"
+        />
+      </div>
+    </div>
+
+    <div class="filter-footer">
+      <button
+        class="apply-filters-btn"
+        (click)="toggleFilterPanel()"
+        [disabled]="!hasActiveFilters"
+      >
+        Apply Filters
+      </button>
+    </div>
+  </div>
+
+  <!-- Active Filters Display -->
+  <div *ngIf="hasActiveFilters" class="active-filters">
+    <div class="active-filters-label">Active filters:</div>
+    <div class="active-filter-tags">
+      <span
+        *ngFor="let filter of activeFilters"
+        class="filter-tag"
+        (click)="removeFilter(filter)"
+        title="Click to remove"
+      >
+        {{ filter.field }}: {{ filter.value }}
+        <span class="remove-tag">×</span>
+      </span>
+    </div>
+  </div>
+</div>
