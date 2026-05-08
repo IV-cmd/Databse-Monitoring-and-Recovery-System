@@ -1,0 +1,30 @@
+<aside class="sidebar" [class.collapsed]="isCollapsed" (keydown)="onKeydown($event)">
+  <div class="sidebar-header">
+    <button 
+      class="toggle-btn" 
+      (click)="toggleSidebar()"
+      [attr.aria-label]="isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+      [attr.aria-expanded]="!isCollapsed"
+    >
+      <span class="icon">☰</span>
+    </button>
+    <h3 *ngIf="!isCollapsed">Navigation</h3>
+  </div>
+  
+  <nav class="sidebar-nav" role="navigation">
+    <ul>
+      <li *ngFor="let item of getNavigationItems()">
+        <button 
+          class="nav-item" 
+          [class.active]="isActive(item.route)"
+          (click)="navigateTo(item.route)"
+          [attr.aria-label]="item.label + ' navigation'"
+          [attr.aria-current]="isActive(item.route) ? 'page' : null"
+        >
+          <span class="icon">{{ item.icon }}</span>
+          <span class="text" *ngIf="!isCollapsed">{{ item.label }}</span>
+        </button>
+      </li>
+    </ul>
+  </nav>
+</aside>
