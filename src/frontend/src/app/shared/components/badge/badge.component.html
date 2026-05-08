@@ -1,0 +1,15 @@
+<span 
+  *ngIf="showBadge" 
+  class="badge-wrapper" 
+  [ngClass]="positionClass"
+>
+  <span class="badge" [ngClass]="badgeClass">
+    <!-- Dot Badge -->
+    <span *ngIf="config.showDot" class="badge-dot"></span>
+    
+    <!-- Text/Count Badge -->
+    <span *ngIf="hasContent" class="badge-content">
+      {{ badgeText }}
+    </span>
+  </span>
+</span>
