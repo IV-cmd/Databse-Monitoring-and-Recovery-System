@@ -44,19 +44,19 @@
       <div class="metrics-overview" *ngIf="metricsData">
         <div class="metric-item">
           <span class="metric-label">CPU Usage:</span>
-          <span class="metric-value">{{ metricsData.current?.cpu_usage || 'N/A' }}%</span>
+          <span class="metric-value">{{ metricsData.current.system.cpu_usage || 'N/A' }}%</span>
         </div>
         <div class="metric-item">
           <span class="metric-label">Memory Usage:</span>
-          <span class="metric-value">{{ metricsData.current?.memory_usage || 'N/A' }}%</span>
+          <span class="metric-value">{{ metricsData.current.system.memory_usage || 'N/A' }}%</span>
         </div>
         <div class="metric-item">
           <span class="metric-label">Disk Usage:</span>
-          <span class="metric-value">{{ metricsData.current?.disk_usage || 'N/A' }}%</span>
+          <span class="metric-value">{{ metricsData.current.system.disk_usage || 'N/A' }}%</span>
         </div>
         <div class="metric-item">
           <span class="metric-label">Connections:</span>
-          <span class="metric-value">{{ metricsData.current?.connections || 'N/A' }}</span>
+          <span class="metric-value">{{ metricsData.current.system.connections || 'N/A' }}</span>
         </div>
       </div>
     </div>
