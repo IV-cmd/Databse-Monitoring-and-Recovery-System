@@ -115,4 +115,9 @@ export class Store {
   selectNotifications = (state: AppState) => state.settings?.notifications;
   selectSettingsLoading = (state: AppState) => state.settings?.loading;
   selectSettingsError = (state: AppState) => state.settings?.error;
+
+  // Generic select method for reactive usage
+  select<T>(selector: (state: AppState) => T): T {
+    return selector(this.state);
+  }
 }
