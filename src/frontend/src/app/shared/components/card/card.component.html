@@ -1,0 +1,72 @@
+<div class="card-container" [ngClass]="cardClass" (click)="onCardClick()">
+  <!-- Loading Overlay -->
+  <div *ngIf="config.loading" class="card-loading-overlay">
+    <app-loading [config]="{ type: 'spinner', size: 'small' }"></app-loading>
+  </div>
+
+  <!-- Dismiss Button -->
+  <button 
+    *ngIf="config.dismissible" 
+    class="card-dismiss" 
+    (click)="onDismiss($event)"
+    aria-label="Dismiss card"
+  >
+    ×
+  </button>
+
+  <!-- Card Image -->
+  <div *ngIf="hasImage" class="card-image">
+    <img [src]="config.image" [alt]="config.title || 'Card image'" />
+  </div>
+
+  <!-- Card Header -->
+  <div *ngIf="hasHeader" class="card-header">
+    <div class="card-header-content">
+      <!-- Icon -->
+      <div *ngIf="config.icon" class="card-icon">
+        <span>{{ config.icon }}</span>
+      </div>
+      
+      <!-- Title and Subtitle -->
+      <div class="card-title-section">
+        <h3 *ngIf="config.title" class="card-title">{{ config.title }}</h3>
+        <p *ngIf="config.subtitle" class="card-subtitle">{{ config.subtitle }}</p>
+      </div>
+      
+      <!-- Badge -->
+      <div *ngIf="config.badge" class="card-badge">
+        <span class="badge-content">{{ config.badge }}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Card Body -->
+  <div *ngIf="config.content" class="card-body">
+    <div class="card-content" [innerHTML]="config.content"></div>
+  </div>
+
+  <!-- Card Content Slot -->
+  <div class="card-body">
+    <ng-content></ng-content>
+  </div>
+
+  <!-- Card Footer -->
+  <div *ngIf="hasFooter" class="card-footer">
+    <!-- Footer Text -->
+    <div *ngIf="config.footer" class="card-footer-text">
+      {{ config.footer }}
+    </div>
+    
+    <!-- Action Buttons -->
+    <div *ngIf="config.actions && config.actions.length > 0" class="card-actions">
+      <button 
+        *ngFor="let action of config.actions"
+        class="card-action"
+        [ngClass]="getActionClass(action.type)"
+        (click)="onActionClick(action.action, $event)"
+      >
+        {{ action.label }}
+      </button>
+    </div>
+  </div>
+</div>
