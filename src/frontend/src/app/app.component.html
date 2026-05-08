@@ -1,0 +1,20 @@
+<div class="app-container">
+  <app-header></app-header>
+  
+  <div class="main-layout">
+    <app-sidebar></app-sidebar>
+    
+    <main class="main-content">
+      <router-outlet></router-outlet>
+    </main>
+  </div>
+  
+  <!-- Global UI Components -->
+  <app-error-modal></app-error-modal>
+  <app-loading></app-loading>
+  
+  <!-- Toast Container -->
+  <div class="toast-container">
+    <!-- Toasts will be dynamically added here -->
+  </div>
+</div>
