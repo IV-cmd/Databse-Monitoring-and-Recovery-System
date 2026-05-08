@@ -1,0 +1,42 @@
+<div class="toast-container" [ngClass]="toastClass" [class.visible]="isVisible">
+  <!-- Progress Bar -->
+  <div *ngIf="showProgressBar" class="toast-progress">
+    <div class="progress-bar" [style.width.%]="progress"></div>
+  </div>
+
+  <!-- Toast Content -->
+  <div class="toast-content" (mouseenter)="onMouseEnter()" (mouseleave)="onMouseLeave()">
+    <!-- Icon -->
+    <div *ngIf="showIcon" class="toast-icon">
+      <span>{{ icon }}</span>
+    </div>
+
+    <!-- Message Section -->
+    <div class="toast-message">
+      <h4 *ngIf="hasTitle" class="toast-title">{{ config.title }}</h4>
+      <p class="toast-text">{{ config.message }}</p>
+    </div>
+
+    <!-- Actions -->
+    <div *ngIf="hasActions" class="toast-actions">
+      <button
+        *ngFor="let action of config.actions"
+        class="toast-action"
+        [ngClass]="getActionClass(action.type)"
+        (click)="onActionClick(action.action)"
+      >
+        {{ action.label }}
+      </button>
+    </div>
+
+    <!-- Close Button -->
+    <button
+      *ngIf="showCloseButton"
+      class="toast-close"
+      (click)="onClose()"
+      aria-label="Close notification"
+    >
+      ×
+    </button>
+  </div>
+</div>
