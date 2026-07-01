@@ -51,7 +51,7 @@ class PostgreSQLAuthConfig:
     
     def get_connection_params(self, is_replica: bool = False) -> Dict[str, Any]:
         """Get secure connection parameters."""
-        url = settings.REPLICA_URL if is_replica else settings.DATABASE_URL
+        url = settings.replica_url if is_replica else settings.database_url
         
         params = {
             "timeout": self.connection_timeout,
@@ -82,7 +82,7 @@ async def get_authenticated_connection(is_replica: bool = False):
     except asyncpg.PostgresConnectionError as e:
         logger.error(f"PostgreSQL connection failed ({'replica' if is_replica else 'primary'}): {e}")
         raise
-    except asyncpg.PostgresAuthenticationError as e:
+    except asyncpg.InvalidPasswordError as e:
         logger.error(f"PostgreSQL authentication failed ({'replica' if is_replica else 'primary'}): {e}")
         raise HTTPException(status_code=401, detail="Database authentication failed")
     except Exception as e:
@@ -215,14 +215,23 @@ async def check_dependencies():
     try:
         async with get_authenticated_connection(is_replica=False) as conn:
             await conn.execute("SELECT 1")
-            # Get connection info for detailed health
             version = await conn.fetchval("SELECT version()")
-            connections = await conn.fetchval("SELECT count(*) FROM pg_stat_activity WHERE state = 'active'")
-            
+            active_connections = await conn.fetchval(
+                "SELECT count(*) FROM pg_stat_activity WHERE state = 'active'"
+            )
+            total_connections = await conn.fetchval(
+                "SELECT count(*) FROM pg_stat_activity"
+            )
+            db_size = await conn.fetchval(
+                "SELECT pg_database_size(current_database())"
+            )
+
             dependencies["postgresql_primary"] = {
                 "status": "healthy",
                 "version": version.split(",")[0],
-                "active_connections": connections,
+                "active_connections": active_connections,
+                "total_connections": total_connections,
+                "database_size_bytes": db_size,
                 "ssl_enabled": settings.DB_SSL_ENABLED,
                 "authentication": "secure"
             }
@@ -230,93 +239,92 @@ async def check_dependencies():
         raise
     except asyncpg.PostgresConnectionError as e:
         dependencies["postgresql_primary"] = {"status": "unhealthy", "error": "Connection failed", "details": str(e)}
-    except asyncpg.PostgresAuthenticationError as e:
+    except asyncpg.InvalidPasswordError as e:
         dependencies["postgresql_primary"] = {"status": "unhealthy", "error": "Authentication failed", "details": str(e)}
     except Exception as e:
         dependencies["postgresql_primary"] = {"status": "unhealthy", "error": "Unknown error", "details": str(e)}
     
     # Check PostgreSQL Replica with authentication
-    try:
-        async with get_authenticated_connection(is_replica=True) as conn:
-            await conn.execute("SELECT 1")
-            # Get replication lag info
-            try:
-                lag = await conn.fetchval("SELECT EXTRACT(EPOCH FROM (now() - pg_last_xact_replay_timestamp()))")
-                replication_lag = float(lag) if lag else 0
-            except:
-                replication_lag = None
-            
-            dependencies["postgresql_replica"] = {
-                "status": "healthy",
-                "replication_lag_seconds": replication_lag,
-                "ssl_enabled": settings.DB_SSL_ENABLED,
-                "authentication": "secure"
-            }
-    except HTTPException:
-        raise
-    except asyncpg.PostgresConnectionError as e:
-        dependencies["postgresql_replica"] = {"status": "unhealthy", "error": "Connection failed", "details": str(e)}
-    except asyncpg.PostgresAuthenticationError as e:
-        dependencies["postgresql_replica"] = {"status": "unhealthy", "error": "Authentication failed", "details": str(e)}
-    except Exception as e:
-        dependencies["postgresql_replica"] = {"status": "unhealthy", "error": "Unknown error", "details": str(e)}
+    if not settings.replica_url:
+        dependencies["postgresql_replica"] = {"status": "not_configured", "message": "No REPLICA_URL set in environment"}
+    else:
+        try:
+            async with get_authenticated_connection(is_replica=True) as conn:
+                await conn.execute("SELECT 1")
+                version = await conn.fetchval("SELECT version()")
+                active_connections = await conn.fetchval(
+                    "SELECT count(*) FROM pg_stat_activity WHERE state = 'active'"
+                )
+                total_connections = await conn.fetchval(
+                    "SELECT count(*) FROM pg_stat_activity"
+                )
+                db_size = await conn.fetchval(
+                    "SELECT pg_database_size(current_database())"
+                )
+                try:
+                    lag = await conn.fetchval(
+                        "SELECT EXTRACT(EPOCH FROM (now() - pg_last_xact_replay_timestamp()))"
+                    )
+                    replication_lag = float(lag) if lag else 0
+                except Exception:
+                    replication_lag = None
+                dependencies["postgresql_replica"] = {
+                    "status": "healthy",
+                    "version": version.split(",")[0] if version else None,
+                    "active_connections": active_connections,
+                    "total_connections": total_connections,
+                    "database_size_bytes": db_size,
+                    "replication_lag_seconds": replication_lag,
+                    "ssl_enabled": settings.DB_SSL_ENABLED,
+                    "authentication": "secure"
+                }
+        except HTTPException:
+            raise
+        except asyncpg.PostgresConnectionError as e:
+            dependencies["postgresql_replica"] = {"status": "unhealthy", "error": "Connection failed", "details": str(e)}
+        except asyncpg.InvalidPasswordError as e:
+            dependencies["postgresql_replica"] = {"status": "unhealthy", "error": "Authentication failed", "details": str(e)}
+        except Exception as e:
+            dependencies["postgresql_replica"] = {"status": "unhealthy", "error": "Unknown error", "details": str(e)}
     
-    # Check Prometheus with authentication
+    # Check Prometheus
+    prometheus_url = getattr(settings, 'PROMETHEUS_URL', 'http://prometheus:9090')
+    prometheus_user = getattr(settings, 'PROMETHEUS_USERNAME', None)
+    prometheus_pass = getattr(settings, 'PROMETHEUS_PASSWORD', None)
     try:
         headers = {}
-        if settings.PROMETHEUS_USERNAME and settings.PROMETHEUS_PASSWORD:
+        if prometheus_user and prometheus_pass:
             import base64
-            credentials = base64.b64encode(f"{settings.PROMETHEUS_USERNAME}:{settings.PROMETHEUS_PASSWORD}".encode()).decode()
+            credentials = base64.b64encode(f"{prometheus_user}:{prometheus_pass}".encode()).decode()
             headers["Authorization"] = f"Basic {credentials}"
-        
-        async with httpx.AsyncClient(timeout=5) as client:
-            response = await client.get(
-                f"{settings.PROMETHEUS_URL}/-/healthy", 
-                headers=headers,
-                timeout=5
-            )
+        async with httpx.AsyncClient(timeout=3) as client:
+            response = await client.get(f"{prometheus_url}/-/healthy", headers=headers)
             dependencies["prometheus"] = {
                 "status": "healthy" if response.status_code == 200 else "unhealthy",
                 "response_time_ms": response.elapsed.total_seconds() * 1000,
-                "authentication": "enabled" if headers else "disabled"
             }
-    except httpx.HTTPStatusError as e:
-        dependencies["prometheus"] = {"status": "unhealthy", "error": "HTTP error", "details": f"Status: {e.response.status_code}"}
-    except httpx.RequestError as e:
-        dependencies["prometheus"] = {"status": "unhealthy", "error": "Connection failed", "details": str(e)}
     except Exception as e:
-        dependencies["prometheus"] = {"status": "unhealthy", "error": "Unknown error", "details": str(e)}
-    
-    # Check Grafana with authentication
+        dependencies["prometheus"] = {"status": "not_reachable", "error": str(e)}
+
+    # Check Grafana
+    grafana_url = getattr(settings, 'GRAFANA_URL', 'http://grafana:3000')
+    grafana_key = getattr(settings, 'GRAFANA_API_KEY', None)
     try:
         headers = {}
-        if settings.GRAFANA_API_KEY:
-            headers["Authorization"] = f"Bearer {settings.GRAFANA_API_KEY}"
-        
-        async with httpx.AsyncClient(timeout=5) as client:
-            response = await client.get(
-                f"{settings.GRAFANA_URL}/api/health", 
-                headers=headers,
-                timeout=5
-            )
+        if grafana_key:
+            headers["Authorization"] = f"Bearer {grafana_key}"
+        async with httpx.AsyncClient(timeout=3) as client:
+            response = await client.get(f"{grafana_url}/api/health", headers=headers)
             dependencies["grafana"] = {
                 "status": "healthy" if response.status_code == 200 else "unhealthy",
                 "response_time_ms": response.elapsed.total_seconds() * 1000,
-                "authentication": "enabled" if headers else "disabled"
             }
-    except httpx.HTTPStatusError as e:
-        dependencies["grafana"] = {"status": "unhealthy", "error": "HTTP error", "details": f"Status: {e.response.status_code}"}
-    except httpx.RequestError as e:
-        dependencies["grafana"] = {"status": "unhealthy", "error": "Connection failed", "details": str(e)}
     except Exception as e:
-        dependencies["grafana"] = {"status": "unhealthy", "error": "Unknown error", "details": str(e)}
-    
-    # Add authentication summary
+        dependencies["grafana"] = {"status": "not_reachable", "error": str(e)}
+
     dependencies["authentication_summary"] = {
         "postgresql_ssl_enabled": settings.DB_SSL_ENABLED,
         "postgresql_ssl_verify": settings.DB_SSL_VERIFY,
-        "prometheus_auth_enabled": bool(settings.PROMETHEUS_USERNAME and settings.PROMETHEUS_PASSWORD),
-        "grafana_auth_enabled": bool(settings.GRAFANA_API_KEY)
     }
-    
+
     return dependencies
