@@ -10,7 +10,7 @@ from app.services.monitoring_service import MonitoringService
 from app.services.recovery_service import RecoveryService
 from app.repositories.database_repo import DatabaseRepository
 from app.repositories.data_repo import DataRepository
-from app.core.database import DatabaseManager
+from app.core.database import DatabaseManager, get_database
 
 
 def get_data_repository() -> DataRepository:
@@ -18,14 +18,18 @@ def get_data_repository() -> DataRepository:
     return DataRepository()
 
 
-def get_database_repository() -> DatabaseRepository:
-    """Get database repository instance."""
-    return DatabaseRepository(DatabaseManager())
+async def get_database_repository() -> DatabaseRepository:
+    """Get database repository instance with initialized pool."""
+    try:
+        db_manager = await get_database()
+    except Exception:
+        db_manager = DatabaseManager()
+    return DatabaseRepository(db_manager)
 
 
-def get_database_service() -> DatabaseService:
+async def get_database_service() -> DatabaseService:
     """Get database service instance."""
-    return DatabaseService(get_database_repository())
+    return DatabaseService(await get_database_repository())
 
 
 def get_metrics_service() -> MetricsService:
