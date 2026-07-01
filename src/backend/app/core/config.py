@@ -44,7 +44,15 @@ class Settings(BaseSettings):
     MONITORING_INTERVAL_SECONDS: int = Field(default=30)
     AUTO_RECOVERY_ENABLED: bool = Field(default=True)
     MAX_RECOVERY_ATTEMPTS: int = Field(default=3)
+
+    # Observability stack URLs (localhost for local dev; override in Docker env)
+    PROMETHEUS_URL: str = Field(default="http://localhost:9090")
+    GRAFANA_URL: str = Field(default="http://localhost:3000")
     
+    # Recovery Authentication
+    RECOVERY_AUTH_REQUIRED: bool = Field(default=False)
+    RECOVERY_BEARER_TOKEN: Optional[str] = Field(default=None)
+
     # Thresholds
     MAX_CONNECTIONS: int = Field(default=100)
     REPLICATION_LAG_THRESHOLD: float = Field(default=10.0)
