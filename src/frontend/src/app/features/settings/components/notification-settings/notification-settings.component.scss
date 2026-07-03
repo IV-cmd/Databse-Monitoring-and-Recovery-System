@@ -1,130 +1,206 @@
-.notification-settings {
-  padding: 2rem;
-  max-width: 800px;
-  margin: 0 auto;
+// ── Design tokens ─────────────────────────────────────────────────────────────
+$primary: #6366f1; $primary-bg: #eef2ff;
+$success: #10b981; $warning: #f59e0b; $danger: #ef4444;
+$bg: #f8fafc; $card: #fff; $border: #e2e8f0;
+$text: #1e293b; $muted: #94a3b8;
+
+// ── Page shell ────────────────────────────────────────────────────────────────
+.spage { padding: 2rem; max-width: 860px; }
+
+.spage-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  margin-bottom: 1.75rem;
+  .spage-title { font-size: 1.3rem; font-weight: 800; color: $text; margin: 0 0 .2rem; }
+  .spage-sub   { font-size: .82rem; color: $muted; margin: 0; }
+}
+.header-hint { font-size: .75rem; color: $muted; kbd { background: #f1f5f9; border: 1px solid $border; border-radius: 4px; padding: .1rem .35rem; font-size: .7rem; } }
+.dirty-badge { font-size: .75rem; font-weight: 700; color: $warning; background: #fef3c7; padding: .25rem .7rem; border-radius: 99px; }
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+.s-toast {
+  position: fixed; top: 1.2rem; right: 1.5rem; z-index: 9999;
+  background: $success; color: #fff; padding: .7rem 1.2rem;
+  border-radius: 10px; font-size: .85rem; font-weight: 600;
+  box-shadow: 0 4px 16px rgba(0,0,0,.15);
+  opacity: 0; transform: translateY(-8px); pointer-events: none;
+  transition: all .25s;
+  &.show { opacity: 1; transform: translateY(0); }
+  &.toast-err { background: $danger; }
 }
 
-.form-header {
-  margin-bottom: 2rem;
-  
-  h2 {
-    margin: 0;
-    color: #333;
+// ── Cards ─────────────────────────────────────────────────────────────────────
+.s-card {
+  background: $card; border: 1px solid $border; border-radius: 14px;
+  padding: 1.4rem 1.5rem; margin-bottom: 1.25rem;
+  box-shadow: 0 1px 4px rgba(0,0,0,.04);
+}
+.s-card-title { font-size: .8rem; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: $muted; margin-bottom: 1rem; }
+
+// ── Field labels / groups ─────────────────────────────────────────────────────
+.field-label { font-size: .78rem; font-weight: 700; color: $text; margin-bottom: .45rem; &.mt { margin-top: 1.1rem; } }
+.field-group  { display: flex; flex-direction: column; gap: .3rem; }
+.field-row    { margin-top: 1rem; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.grid3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 1rem; }
+
+// ── Env picker cards ──────────────────────────────────────────────────────────
+.env-cards { display: flex; gap: .75rem; }
+.env-card {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: .35rem;
+  padding: .85rem .5rem; border: 2px solid $border; border-radius: 12px;
+  background: $bg; cursor: pointer; transition: all .15s; font-family: inherit;
+  .env-icon  { font-size: 1.4rem; }
+  .env-label { font-size: .78rem; font-weight: 700; color: $muted; }
+  &:hover { border-color: var(--env-color); }
+  &.selected { border-color: var(--env-color); background: #fff; box-shadow: 0 0 0 3px color-mix(in srgb, var(--env-color) 12%, transparent);
+    .env-label { color: var(--env-color); } }
+}
+
+// ── Log level / severity pills ────────────────────────────────────────────────
+.pill-row { display: flex; gap: .5rem; flex-wrap: wrap; }
+.pill {
+  padding: .35rem .9rem; border: 1.5px solid $border; border-radius: 99px;
+  background: $bg; font-size: .78rem; font-weight: 700; color: $muted;
+  cursor: pointer; transition: all .15s; font-family: inherit;
+  &:hover { border-color: var(--pill-color); color: var(--pill-color); }
+  &.active { background: var(--pill-color); border-color: var(--pill-color); color: #fff; }
+}
+
+// ── Toggle switch ─────────────────────────────────────────────────────────────
+.toggle-rows { display: flex; flex-direction: column; gap: 0; margin-top: 1rem; }
+.toggle-row  {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: .85rem 0; border-top: 1px solid $border;
+  .toggle-label { font-size: .85rem; font-weight: 700; color: $text; }
+  .toggle-desc  { font-size: .72rem; color: $muted; margin-top: .1rem; }
+  &.warn-row { background: #fffbeb; margin: 0 -1.5rem; padding: .85rem 1.5rem; border-radius: 0 0 14px 14px; }
+}
+.badge-warn { font-size: .65rem; font-weight: 800; background: $warning; color: #fff; padding: .1rem .4rem; border-radius: 4px; margin-left: .4rem; vertical-align: middle; }
+
+.sw { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0;
+  input { opacity: 0; width: 0; height: 0; }
+  .sw-track {
+    position: absolute; inset: 0; background: #cbd5e1; border-radius: 99px; cursor: pointer; transition: .2s;
+    &::before { content: ''; position: absolute; height: 18px; width: 18px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: .2s; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+  }
+  input:checked + .sw-track { background: $primary; &::before { transform: translateX(20px); } }
+}
+.sw-danger input:checked + .sw-track { background: $danger; }
+
+// ── Range slider ──────────────────────────────────────────────────────────────
+.range-row { display: flex; align-items: center; gap: .75rem;
+  input[type=range] { flex: 1; accent-color: $primary; }
+  .range-val { font-size: .82rem; font-weight: 700; color: $primary; min-width: 42px; text-align: right; }
+}
+
+// ── Styled select ─────────────────────────────────────────────────────────────
+.s-select {
+  width: 100%; padding: .55rem .75rem; border: 1.5px solid $border; border-radius: 8px;
+  font-size: .82rem; color: $text; background: $card; appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2394a3b8' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right .75rem center;
+  padding-right: 2rem; cursor: pointer; transition: border-color .15s;
+  &:focus { outline: none; border-color: $primary; }
+}
+
+// ── Styled text/url input ─────────────────────────────────────────────────────
+.s-input {
+  width: 100%; padding: .55rem .75rem; border: 1.5px solid $border; border-radius: 8px;
+  font-size: .82rem; color: $text; background: $card; transition: border-color .15s; box-sizing: border-box;
+  &:focus { outline: none; border-color: $primary; }
+  &.mono { font-family: 'SF Mono','Fira Code',monospace; font-size: .75rem; }
+}
+
+// ── Numeric stepper ───────────────────────────────────────────────────────────
+.num-input-row { display: flex; align-items: center; gap: 0;
+  .num-btn { width: 34px; height: 36px; border: 1.5px solid $border; background: $bg; color: $text; font-size: 1.1rem; cursor: pointer; transition: background .15s;
+    &:first-child { border-radius: 8px 0 0 8px; border-right: none; }
+    &:last-child  { border-radius: 0 8px 8px 0; border-left: none; }
+    &:hover { background: #e2e8f0; }
+  }
+  .num-input { flex: 1; height: 36px; border: 1.5px solid $border; border-left: none; border-right: none; text-align: center; font-size: .85rem; font-weight: 700; background: $card; color: $text;
+    &:focus { outline: none; }
+    &::-webkit-inner-spin-button { display: none; }
   }
 }
 
-.settings-form {
-  .form-section {
-    margin-bottom: 2rem;
-    padding: 1.5rem;
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    
-    h4 {
-      margin-top: 0;
-      margin-bottom: 1rem;
-      color: #333;
-    }
-  }
-  
-  .form-group {
-    margin-bottom: 1rem;
-    
-    label {
-      display: block;
-      margin-bottom: 0.5rem;
-      font-weight: 600;
-      color: #333;
-    }
-    
-    input, select {
-      width: 100%;
-      padding: 0.75rem;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      font-size: 1rem;
-      
-      &:focus {
-        outline: none;
-        border-color: #667eea;
-      }
-    }
-    
-    input[type="checkbox"] {
-      width: auto;
-      margin-right: 0.5rem;
-    }
-  }
-  
-  .email-section,
-  .slack-section,
-  .sms-section {
-    background: #f8f9fa;
-    padding: 1rem;
-    border-radius: 4px;
-    margin-top: 1rem;
-    border-left: 4px solid #667eea;
-    
-    .form-group {
-      margin-bottom: 1rem;
-      
-      &:last-child {
-        margin-bottom: 0;
-      }
-    }
+// ── Input with suffix icon ────────────────────────────────────────────────────
+.input-wrap { position: relative; display: flex; align-items: center;
+  .s-input { padding-right: 2.5rem; }
+  .input-btn { position: absolute; right: .5rem; background: none; border: none; cursor: pointer; color: $muted; font-size: .85rem; padding: .15rem .3rem; border-radius: 4px; transition: color .15s;
+    &:hover { color: $primary; }
   }
 }
 
-.checkbox-label {
-  display: flex;
-  align-items: center;
-  cursor: pointer;
+// ── Connection test badge ─────────────────────────────────────────────────────
+.conn-badge {
+  display: inline-flex; align-items: center; gap: .3rem;
+  font-size: .75rem; font-weight: 700; padding: .25rem .6rem; border-radius: 99px;
+  &.ok   { background: #d1fae5; color: #065f46; }
+  &.fail { background: #fee2e2; color: #991b1b; }
+  &.testing { background: #e0e7ff; color: #3730a3; }
 }
 
-.form-actions {
-  display: flex;
-  gap: 1rem;
-  justify-content: flex-end;
-  margin-top: 2rem;
-  
-  button {
-    padding: 0.75rem 1.5rem;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    
-    &.btn-primary {
-      background: #667eea;
-      color: white;
-      
-      &:hover {
-        background: #5a6fd8;
-      }
-    }
-    
-    &.btn-secondary {
-      background: #f8f9fa;
-      color: #666;
-      border: 1px solid #ddd;
-      
-      &:hover {
-        background: #e9ecef;
-      }
-    }
+// ── Threshold bar ─────────────────────────────────────────────────────────────
+.thr-row { display: grid; grid-template-columns: 110px 1fr 90px 90px; align-items: center; gap: .75rem; padding: .75rem 0; border-top: 1px solid $border; }
+.thr-name  { font-size: .8rem; font-weight: 700; color: $text; }
+.thr-bar-wrap { position: relative; height: 8px; background: #e2e8f0; border-radius: 99px; overflow: visible;
+  .thr-bar-ok   { position: absolute; left: 0; top: 0; bottom: 0; background: $success; border-radius: 99px; transition: width .2s; }
+  .thr-bar-warn { position: absolute; top: 0; bottom: 0; background: $warning; border-radius: 99px; transition: all .2s; }
+  .thr-bar-crit { position: absolute; top: 0; bottom: 0; right: 0; background: $danger; border-radius: 0 99px 99px 0; transition: all .2s; }
+}
+.thr-input-group { display: flex; flex-direction: column; gap: .15rem;
+  label { font-size: .65rem; font-weight: 700; color: $warning; text-transform: uppercase; letter-spacing: .04em; }
+  input[type=number] { width: 72px; padding: .35rem .5rem; border: 1.5px solid $border; border-radius: 6px; font-size: .8rem; text-align: center;
+    &:focus { outline: none; border-color: $warning; }
   }
 }
+.thr-input-group.crit label { color: $danger; }
+.thr-input-group.crit input:focus { border-color: $danger; }
 
-@media (max-width: 768px) {
-  .notification-settings {
-    padding: 1rem;
+// ── Provider cards (notifications) ────────────────────────────────────────────
+.provider-card {
+  border: 1.5px solid $border; border-radius: 14px; overflow: hidden; margin-bottom: 1rem;
+  &.enabled { border-color: $primary; }
+}
+.provider-header {
+  display: flex; align-items: center; gap: .75rem; padding: 1rem 1.25rem;
+  background: $bg; cursor: pointer;
+  .ph-icon  { font-size: 1.3rem; }
+  .ph-title { font-size: .9rem; font-weight: 800; color: $text; flex: 1; }
+  .ph-badge { font-size: .68rem; font-weight: 700; padding: .15rem .5rem; border-radius: 99px;
+    &.on  { background: #d1fae5; color: #065f46; }
+    &.off { background: #f1f5f9; color: $muted; }
   }
-  
-  .form-actions {
-    flex-direction: column;
-    
-    button {
-      width: 100%;
-    }
-  }
+}
+.provider-body { padding: 1.25rem; border-top: 1px solid $border; display: flex; flex-direction: column; gap: .85rem; }
+
+// ── Save bar ──────────────────────────────────────────────────────────────────
+.save-bar {
+  display: flex; justify-content: flex-end; align-items: center; gap: .75rem;
+  margin-top: 2rem; padding-top: 1.25rem; border-top: 1px solid $border;
+}
+.btn-ghost {
+  padding: .55rem 1.1rem; border: 1.5px solid $border; border-radius: 8px; background: $card;
+  font-size: .82rem; font-weight: 700; color: $muted; cursor: pointer; font-family: inherit; transition: all .15s;
+  &:hover { border-color: $primary; color: $primary; }
+}
+.btn-save {
+  padding: .6rem 1.4rem; border: none; border-radius: 8px;
+  font-size: .85rem; font-weight: 700; color: #fff; cursor: pointer; font-family: inherit;
+  background: #cbd5e1; transition: background .2s;
+  &.btn-save-active { background: $primary; box-shadow: 0 2px 8px rgba(99,102,241,.3); }
+}
+.btn-test {
+  padding: .5rem 1rem; border: 1.5px solid $primary; border-radius: 8px; background: $card;
+  font-size: .78rem; font-weight: 700; color: $primary; cursor: pointer; font-family: inherit; transition: all .15s; white-space: nowrap;
+  &:hover { background: $primary-bg; }
+  &:disabled { opacity: .5; cursor: default; }
+}
+
+@media (max-width: 640px) {
+  .spage { padding: 1rem; }
+  .grid2, .grid3 { grid-template-columns: 1fr; }
+  .env-cards { flex-direction: column; }
+  .thr-row { grid-template-columns: 1fr 1fr; .thr-bar-wrap { display: none; } }
 }

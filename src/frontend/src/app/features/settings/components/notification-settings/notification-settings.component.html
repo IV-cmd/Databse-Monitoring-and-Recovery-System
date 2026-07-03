@@ -1,189 +1,144 @@
-<div class="notification-settings">
-  <div class="form-header">
-    <h2>Notification Settings</h2>
+<div class="spage">
+  <div class="s-toast" [class.show]="showToast" [class.toast-err]="toastType==='error'">{{ toastMsg }}</div>
+
+  <div class="spage-header">
+    <div>
+      <h1 class="spage-title">🔔 Notifications</h1>
+      <p class="spage-sub">Configure alert channels and delivery rules</p>
+    </div>
+    <div class="dirty-badge" *ngIf="isDirty">● Unsaved changes</div>
   </div>
 
-  <form class="settings-form">
-    <div class="form-section">
-      <h4>Email Notifications</h4>
-      
-      <div class="form-group">
-        <label class="checkbox-label">
-          <input 
-            type="checkbox" 
-            [(ngModel)]="config.emailEnabled" 
-            name="emailEnabled" />
-          Enable Email Notifications
-        </label>
-      </div>
-
-      <div *ngIf="config.emailEnabled" class="email-section">
-        <div class="form-group">
-          <label for="emailSmtpHost">SMTP Host</label>
-          <input 
-            id="emailSmtpHost" 
-            type="text" 
-            [(ngModel)]="config.emailSmtpHost" 
-            name="emailSmtpHost"
-            placeholder="smtp.gmail.com"
-            class="form-control" />
-        </div>
-
-        <div class="form-group">
-          <label for="emailSmtpPort">SMTP Port</label>
-          <input 
-            id="emailSmtpPort" 
-            type="number" 
-            [(ngModel)]="config.emailSmtpPort" 
-            name="emailSmtpPort"
-            min="1" 
-            max="65535"
-            class="form-control" />
-        </div>
-
-        <div class="form-group">
-          <label for="emailUsername">Username</label>
-          <input 
-            id="emailUsername" 
-            type="text" 
-            [(ngModel)]="config.emailUsername" 
-            name="emailUsername"
-            placeholder="your-email@gmail.com"
-            class="form-control" />
-        </div>
-
-        <div class="form-group">
-          <label for="emailPassword">Password</label>
-          <input 
-            id="emailPassword" 
-            type="password" 
-            [(ngModel)]="config.emailPassword" 
-            name="emailPassword"
-            placeholder="App password"
-            class="form-control" />
-        </div>
-
-        <div class="form-group">
-          <label for="emailFrom">From Address</label>
-          <input 
-            id="emailFrom" 
-            type="email" 
-            [(ngModel)]="config.emailFrom" 
-            name="emailFrom"
-            placeholder="monitoring@yourcompany.com"
-            class="form-control" />
-        </div>
-
-        <div class="form-group">
-          <label for="emailTo">To Address</label>
-          <input 
-            id="emailTo" 
-            type="email" 
-            [(ngModel)]="config.emailTo" 
-            name="emailTo"
-            placeholder="admin@yourcompany.com"
-            class="form-control" />
-        </div>
-      </div>
+  <!-- Email card -->
+  <div class="provider-card" [class.enabled]="config.emailEnabled">
+    <div class="provider-header">
+      <span class="ph-icon">✉️</span>
+      <span class="ph-title">Email (SMTP)</span>
+      <span class="ph-badge" [class.on]="config.emailEnabled" [class.off]="!config.emailEnabled">
+        {{ config.emailEnabled ? 'Enabled' : 'Disabled' }}
+      </span>
+      <label class="sw">
+        <input type="checkbox" [(ngModel)]="config.emailEnabled" (ngModelChange)="onChange()">
+        <span class="sw-track"></span>
+      </label>
     </div>
-
-    <div class="form-section">
-      <h4>Slack Notifications</h4>
-      
-      <div class="form-group">
-        <label class="checkbox-label">
-          <input 
-            type="checkbox" 
-            [(ngModel)]="config.slackEnabled" 
-            name="slackEnabled" />
-          Enable Slack Notifications
-        </label>
-      </div>
-
-      <div *ngIf="config.slackEnabled" class="slack-section">
-        <div class="form-group">
-          <label for="slackWebhookUrl">Webhook URL</label>
-          <input 
-            id="slackWebhookUrl" 
-            type="url" 
-            [(ngModel)]="config.slackWebhookUrl" 
-            name="slackWebhookUrl"
-            placeholder="https://hooks.slack.com/services/..."
-            class="form-control" />
+    <div class="provider-body" *ngIf="config.emailEnabled">
+      <div class="grid2">
+        <div class="field-group">
+          <label class="field-label">SMTP Host</label>
+          <input class="s-input" type="text" [(ngModel)]="config.emailSmtpHost" (ngModelChange)="onChange()" placeholder="smtp.gmail.com">
         </div>
-
-        <div class="form-group">
-          <label for="slackChannel">Channel</label>
-          <input 
-            id="slackChannel" 
-            type="text" 
-            [(ngModel)]="config.slackChannel" 
-            name="slackChannel"
-            placeholder="#alerts"
-            class="form-control" />
+        <div class="field-group">
+          <label class="field-label">Port</label>
+          <input class="s-input" type="number" [(ngModel)]="config.emailSmtpPort" (ngModelChange)="onChange()" placeholder="587">
         </div>
       </div>
-    </div>
-
-    <div class="form-section">
-      <h4>SMS Notifications</h4>
-      
-      <div class="form-group">
-        <label class="checkbox-label">
-          <input 
-            type="checkbox" 
-            [(ngModel)]="config.enableSms" 
-            name="enableSms" />
-          Enable SMS Notifications
-        </label>
-      </div>
-
-      <div *ngIf="config.enableSms" class="sms-section">
-        <div class="form-group">
-          <label for="smsPhoneNumber">Phone Number</label>
-          <input 
-            id="smsPhoneNumber" 
-            type="tel" 
-            [(ngModel)]="config.smsPhoneNumber" 
-            name="smsPhoneNumber"
-            placeholder="+1234567890"
-            class="form-control" />
+      <div class="grid2">
+        <div class="field-group">
+          <label class="field-label">Username</label>
+          <input class="s-input" type="text" [(ngModel)]="config.emailUsername" (ngModelChange)="onChange()" placeholder="alerts@company.com">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Password</label>
+          <div class="input-wrap">
+            <input class="s-input" [type]="showEmailPw ? 'text' : 'password'" [(ngModel)]="config.emailPassword" (ngModelChange)="onChange()" placeholder="App password">
+            <button class="input-btn" type="button" (click)="showEmailPw=!showEmailPw">{{ showEmailPw ? '🙈' : '👁️' }}</button>
+          </div>
         </div>
       </div>
-    </div>
-
-    <div class="form-section">
-      <h4>Alert Settings</h4>
-      
-      <div class="form-group">
-        <label for="alertSeverity">Minimum Alert Severity</label>
-        <select id="alertSeverity" [(ngModel)]="config.alertSeverity" name="alertSeverity" class="form-control">
-          <option *ngFor="let level of severityLevels" [value]="level.value">
-            {{ level.label }}
-          </option>
-        </select>
+      <div class="grid2">
+        <div class="field-group">
+          <label class="field-label">From Address</label>
+          <input class="s-input" type="email" [(ngModel)]="config.emailFrom" (ngModelChange)="onChange()" placeholder="monitoring@company.com">
+        </div>
+        <div class="field-group">
+          <label class="field-label">To Address</label>
+          <input class="s-input" type="email" [(ngModel)]="config.emailTo" (ngModelChange)="onChange()" placeholder="admin@company.com">
+        </div>
       </div>
-
-      <div class="form-group">
-        <label for="alertCooldownMinutes">Alert Cooldown (minutes)</label>
-        <input 
-          id="alertCooldownMinutes" 
-          type="number" 
-          [(ngModel)]="config.alertCooldownMinutes" 
-          name="alertCooldownMinutes"
-          min="1" 
-          max="1440"
-          class="form-control" />
-      </div>
-    </div>
-
-    <div class="form-actions">
-      <button type="button" class="btn btn-primary" (click)="saveSettings()">
-        Save Settings
-      </button>
-      <button type="button" class="btn btn-secondary" (click)="resetSettings()">
-        Reset to Defaults
+      <button class="btn-test" type="button" (click)="sendTestEmail()" [disabled]="testingEmail">
+        {{ testingEmail ? '⟳ Sending…' : '📨 Send Test Email' }}
       </button>
     </div>
-  </form>
+  </div>
+
+  <!-- Slack card -->
+  <div class="provider-card" [class.enabled]="config.slackEnabled">
+    <div class="provider-header">
+      <span class="ph-icon">💬</span>
+      <span class="ph-title">Slack</span>
+      <span class="ph-badge" [class.on]="config.slackEnabled" [class.off]="!config.slackEnabled">
+        {{ config.slackEnabled ? 'Enabled' : 'Disabled' }}
+      </span>
+      <label class="sw">
+        <input type="checkbox" [(ngModel)]="config.slackEnabled" (ngModelChange)="onChange()">
+        <span class="sw-track"></span>
+      </label>
+    </div>
+    <div class="provider-body" *ngIf="config.slackEnabled">
+      <div class="field-group">
+        <label class="field-label">Webhook URL</label>
+        <input class="s-input mono" type="url" [(ngModel)]="config.slackWebhookUrl" (ngModelChange)="onChange()" placeholder="https://hooks.slack.com/services/…">
+      </div>
+      <div class="field-group">
+        <label class="field-label">Channel</label>
+        <input class="s-input" type="text" [(ngModel)]="config.slackChannel" (ngModelChange)="onChange()" placeholder="#db-alerts">
+      </div>
+      <button class="btn-test" type="button" (click)="sendTestSlack()" [disabled]="testingSlack">
+        {{ testingSlack ? '⟳ Sending…' : '💬 Send Test Message' }}
+      </button>
+    </div>
+  </div>
+
+  <!-- SMS card -->
+  <div class="provider-card" [class.enabled]="config.enableSms">
+    <div class="provider-header">
+      <span class="ph-icon">📱</span>
+      <span class="ph-title">SMS</span>
+      <span class="ph-badge" [class.on]="config.enableSms" [class.off]="!config.enableSms">
+        {{ config.enableSms ? 'Enabled' : 'Disabled' }}
+      </span>
+      <label class="sw">
+        <input type="checkbox" [(ngModel)]="config.enableSms" (ngModelChange)="onChange()">
+        <span class="sw-track"></span>
+      </label>
+    </div>
+    <div class="provider-body" *ngIf="config.enableSms">
+      <div class="field-group">
+        <label class="field-label">Phone Number</label>
+        <input class="s-input" type="tel" [(ngModel)]="config.smsPhoneNumber" (ngModelChange)="onChange()" placeholder="+41 79 000 00 00">
+      </div>
+    </div>
+  </div>
+
+  <!-- Alert rules -->
+  <div class="s-card">
+    <div class="s-card-title">Alert Rules</div>
+    <div class="field-label">Minimum Severity to Notify</div>
+    <div class="pill-row" style="margin-bottom:1.1rem">
+      <button *ngFor="let s of severityLevels" type="button"
+              class="pill" [class.active]="config.alertSeverity === s.value"
+              [style.--pill-color]="s.color"
+              (click)="config.alertSeverity = s.value; onChange()">
+        {{ s.label }}
+      </button>
+    </div>
+    <div class="field-group">
+      <label class="field-label">Alert Cooldown — <strong>{{ config.alertCooldownMinutes }} min</strong> between repeated alerts</label>
+      <div class="range-row">
+        <span style="font-size:.72rem;color:#94a3b8">1m</span>
+        <input type="range" min="1" max="120" step="1" [(ngModel)]="config.alertCooldownMinutes" (ngModelChange)="onChange()">
+        <span style="font-size:.72rem;color:#94a3b8">120m</span>
+        <span class="range-val">{{ config.alertCooldownMinutes }}m</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="save-bar">
+    <button class="btn-ghost" (click)="reset()">Reset to defaults</button>
+    <button class="btn-save" (click)="save()" [class.btn-save-active]="isDirty">
+      {{ isDirty ? 'Save Changes' : '✓ Saved' }}
+    </button>
+  </div>
+
 </div>

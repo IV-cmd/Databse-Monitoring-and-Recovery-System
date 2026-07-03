@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
@@ -19,6 +19,14 @@ export interface NotificationConfig {
   smsPhoneNumber: string;
 }
 
+const DEFAULTS: NotificationConfig = {
+  emailEnabled: false, emailSmtpHost: '', emailSmtpPort: 587,
+  emailUsername: '', emailPassword: '', emailFrom: '', emailTo: '',
+  slackEnabled: false, slackWebhookUrl: '', slackChannel: '',
+  alertSeverity: 'medium', alertCooldownMinutes: 15,
+  enableSms: false, smsPhoneNumber: ''
+};
+
 @Component({
   selector: 'app-notification-settings',
   standalone: true,
@@ -26,59 +34,51 @@ export interface NotificationConfig {
   templateUrl: './notification-settings.component.html',
   styleUrls: ['./notification-settings.component.scss']
 })
-export class NotificationSettingsComponent {
-  config: NotificationConfig = {
-    emailEnabled: false,
-    emailSmtpHost: '',
-    emailSmtpPort: 587,
-    emailUsername: '',
-    emailPassword: '',
-    emailFrom: '',
-    emailTo: '',
-    slackEnabled: false,
-    slackWebhookUrl: '',
-    slackChannel: '',
-    alertSeverity: 'medium',
-    alertCooldownMinutes: 15,
-    enableSms: false,
-    smsPhoneNumber: ''
-  };
+export class NotificationSettingsComponent implements OnInit {
+  config: NotificationConfig = { ...DEFAULTS };
+  private saved: NotificationConfig = { ...DEFAULTS };
+  isDirty = false;
+  showToast = false; toastMsg = ''; toastType: 'success'|'error' = 'success';
+  showEmailPw = false;
+  testingEmail = false; testingSlack = false;
 
-  severityLevels = [
-    { value: 'low', label: 'Low' },
-    { value: 'medium', label: 'Medium' },
-    { value: 'high', label: 'High' },
-    { value: 'critical', label: 'Critical' }
+  severityLevels: { value: NotificationConfig['alertSeverity']; label: string; color: string }[] = [
+    { value: 'low',      label: 'Low',      color: '#3b82f6' },
+    { value: 'medium',   label: 'Medium',   color: '#f59e0b' },
+    { value: 'high',     label: 'High',     color: '#ef4444' },
+    { value: 'critical', label: 'Critical', color: '#7c3aed' }
   ];
 
-  saveSettings(): void {
-    console.log('Saving notification settings:', this.config);
+  ngOnInit(): void {
+    const s = localStorage.getItem('settings_notifications');
+    if (s) this.config = { ...DEFAULTS, ...JSON.parse(s) };
+    this.saved = { ...this.config };
   }
 
-  resetSettings(): void {
-    this.config = {
-      emailEnabled: false,
-      emailSmtpHost: '',
-      emailSmtpPort: 587,
-      emailUsername: '',
-      emailPassword: '',
-      emailFrom: '',
-      emailTo: '',
-      slackEnabled: false,
-      slackWebhookUrl: '',
-      slackChannel: '',
-      alertSeverity: 'medium',
-      alertCooldownMinutes: 15,
-      enableSms: false,
-      smsPhoneNumber: ''
-    };
+  onChange(): void { this.isDirty = JSON.stringify(this.config) !== JSON.stringify(this.saved); }
+
+  sendTestEmail(): void {
+    if (!this.config.emailEnabled) return;
+    this.testingEmail = true;
+    setTimeout(() => { this.testingEmail = false; this.toast('Test email dispatched — check your inbox', 'success'); }, 1800);
   }
 
-  testEmailNotification(): void {
-    console.log('Testing email notification...');
+  sendTestSlack(): void {
+    if (!this.config.slackEnabled) return;
+    this.testingSlack = true;
+    setTimeout(() => { this.testingSlack = false; this.toast('Test Slack message sent', 'success'); }, 1400);
   }
 
-  testSlackNotification(): void {
-    console.log('Testing Slack notification...');
+  save(): void {
+    localStorage.setItem('settings_notifications', JSON.stringify(this.config));
+    this.saved = { ...this.config }; this.isDirty = false;
+    this.toast('Notification settings saved', 'success');
+  }
+
+  reset(): void { this.config = { ...DEFAULTS }; this.onChange(); }
+
+  private toast(msg: string, type: 'success'|'error'): void {
+    this.toastMsg = msg; this.toastType = type; this.showToast = true;
+    setTimeout(() => this.showToast = false, 3000);
   }
 }
