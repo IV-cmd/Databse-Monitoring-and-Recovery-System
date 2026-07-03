@@ -1,23 +1,35 @@
 <header class="app-header">
   <div class="header-content">
-    <div class="logo">
-      <h1>Database Monitor</h1>
+
+    <!-- Brand -->
+    <div class="brand">
+      <span class="brand-icon">&#128268;</span>
+      <div class="brand-text">
+        <span class="brand-name">DB Monitor</span>
+        <span class="brand-sub">Database Monitoring &amp; Recovery</span>
+      </div>
     </div>
-    
-    <nav class="nav-menu">
-      <ul>
-        <li *ngFor="let item of getNavigationItems()">
-          <button 
-            (click)="navigateTo(item.route)" 
-            class="nav-btn"
-            [class.active]="isActive(item.route)"
-            [attr.aria-label]="item.label + ' navigation'"
-          >
-            <span class="nav-icon">{{ item.icon }}</span>
-            <span class="nav-label">{{ item.label }}</span>
-          </button>
-        </li>
-      </ul>
-    </nav>
+
+    <!-- Live Status -->
+    <div class="status-pill" [ngClass]="getStatusClass()">
+      <span class="status-dot-anim"></span>
+      <span class="status-label">{{ getStatusLabel() }}</span>
+      <span class="status-ver" *ngIf="statusVersion">v{{ statusVersion }}</span>
+    </div>
+
+    <!-- Right side: clock + env + docs -->
+    <div class="header-right">
+      <div class="env-badge" [class.env-local]="env === 'LOCAL'" [class.env-staging]="env === 'STAGING'" [class.env-prod]="env === 'PRODUCTION'">
+        {{ env }}
+      </div>
+      <div class="utc-clock">
+        <span class="clock-icon">&#128336;</span>
+        <span>{{ now | date:'HH:mm:ss' }} UTC</span>
+      </div>
+      <a class="docs-link" href="http://localhost:8000/docs" target="_blank" title="API Docs">
+        API Docs &#8599;
+      </a>
+    </div>
+
   </div>
 </header>

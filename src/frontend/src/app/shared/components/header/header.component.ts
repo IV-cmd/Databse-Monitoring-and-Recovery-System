@@ -1,56 +1,69 @@
-import { Component, OnDestroy } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { Router, NavigationEnd } from '@angular/router';
-import { filter } from 'rxjs/operators';
-import { Subscription } from 'rxjs';
-
-export interface NavigationItem {
-  label: string;
-  route: string;
-  icon: string;
-}
+import { Component, OnInit, OnDestroy } from '@angular/core';
+import { CommonModule, DatePipe } from '@angular/common';
+import { ApiService } from '../../../core/services/api.service';
 
 @Component({
   selector: 'app-header',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, DatePipe],
   templateUrl: './header.component.html',
   styleUrls: ['./header.component.scss']
 })
-export class HeaderComponent implements OnDestroy {
-  currentRoute: string = '';
-  private subscription: Subscription;
+export class HeaderComponent implements OnInit, OnDestroy {
+  systemStatus: string = 'unknown';
+  statusVersion: string = '';
+  now: Date = new Date();
+  readonly env: string = this.detectEnv();
 
-  private readonly navigationItems: NavigationItem[] = [
-    { label: 'Dashboard', route: '/dashboard', icon: '📊' },
-    { label: 'Monitoring', route: '/monitoring', icon: '📈' },
-    { label: 'Recovery', route: '/recovery', icon: '🔧' },
-    { label: 'Settings', route: '/settings', icon: '⚙️' }
-  ];
+  private clockTimer: any = null;
+  private pollTimer: any = null;
 
-  constructor(private router: Router) {
-    this.subscription = this.router.events.pipe(
-      filter(event => event instanceof NavigationEnd)
-    ).subscribe((event: any) => {
-      this.currentRoute = event.urlAfterRedirects;
-    });
+  constructor(private apiService: ApiService) {}
+
+  ngOnInit(): void {
+    this.fetchHealth();
+    this.clockTimer = setInterval(() => { this.now = new Date(); }, 1000);
+    this.pollTimer  = setInterval(() => { this.fetchHealth(); }, 30000);
   }
 
   ngOnDestroy(): void {
-    if (this.subscription) {
-      this.subscription.unsubscribe();
+    if (this.clockTimer) clearInterval(this.clockTimer);
+    if (this.pollTimer)  clearInterval(this.pollTimer);
+  }
+
+  private fetchHealth(): void {
+    this.apiService.getHealth().subscribe({
+      next:  (h: any) => { this.systemStatus = h?.status ?? 'unknown'; this.statusVersion = h?.version ?? ''; },
+      error: ()       => { this.systemStatus = 'unreachable'; }
+    });
+  }
+
+  private detectEnv(): string {
+    const host = window.location.hostname;
+    if (host === 'localhost' || host === '127.0.0.1') return 'LOCAL';
+    if (host.includes('staging') || host.includes('stage')) return 'STAGING';
+    return 'PRODUCTION';
+  }
+
+  getStatusLabel(): string {
+    switch (this.systemStatus.toLowerCase()) {
+      case 'healthy':     return 'All Systems Operational';
+      case 'warning':     return 'Degraded Performance';
+      case 'unhealthy':
+      case 'error':       return 'System Degraded';
+      case 'unreachable': return 'Backend Unreachable';
+      default:            return 'Checking…';
     }
   }
 
-  navigateTo(route: string): void {
-    this.router.navigate([route]);
-  }
-
-  isActive(route: string): boolean {
-    return this.currentRoute === route || this.currentRoute.startsWith(route + '/');
-  }
-
-  getNavigationItems(): NavigationItem[] {
-    return this.navigationItems;
+  getStatusClass(): string {
+    switch (this.systemStatus.toLowerCase()) {
+      case 'healthy':     return 'status-ok';
+      case 'warning':     return 'status-warn';
+      case 'unhealthy':
+      case 'error':
+      case 'unreachable': return 'status-err';
+      default:            return 'status-unknown';
+    }
   }
 }
