@@ -1,99 +1,350 @@
 <div class="dashboard-container">
+
+  <!-- Header -->
   <div class="dashboard-header">
-    <h1>Database Monitoring Dashboard</h1>
-    <button class="refresh-btn" (click)="refreshData()" [disabled]="loading">
-      <span class="loading-spinner" *ngIf="loading"></span>
-      Refresh
-    </button>
+    <div class="header-left">
+      <div class="title-row">
+        <span class="status-dot" [ngClass]="getStatusClass(healthData?.status || 'unknown')"></span>
+        <h1>Database Monitoring Dashboard</h1>
+      </div>
+      <div class="header-meta">
+        <span *ngIf="healthData">Last updated: {{ healthData.timestamp | date:'HH:mm:ss' }}</span>
+        <span class="sep" *ngIf="healthData && monitoringStatus">·</span>
+        <span *ngIf="monitoringStatus">
+          Monitoring: <strong [class.text-success]="isMonitoringActive()" [class.text-danger]="!isMonitoringActive()">
+            {{ isMonitoringActive() ? 'Active' : 'Inactive' }}
+          </strong>
+          &nbsp;·&nbsp;Interval: {{ getMonitoringInterval() }}s
+        </span>
+      </div>
+    </div>
+    <div class="header-actions">
+      <div class="auto-refresh-pill" [class.pill-active]="autoRefreshEnabled">
+        <input type="checkbox" id="ar-toggle" [checked]="autoRefreshEnabled" (change)="toggleAutoRefresh()">
+        <label for="ar-toggle">Auto-refresh</label>
+        <span class="countdown" *ngIf="autoRefreshEnabled">{{ countdown }}s</span>
+      </div>
+      <button class="refresh-btn" (click)="refreshData()" [disabled]="isFetching">
+        <span class="spin-icon" [class.spinning]="isFetching">&#8635;</span>
+        {{ isFetching ? 'Refreshing…' : 'Refresh Now' }}
+      </button>
+    </div>
   </div>
 
-  <div class="error-message" *ngIf="error">
-    {{ error }}
+  <!-- Active alert banner -->
+  <div class="alert-banner" *ngIf="hasAlerts()">
+    <span class="alert-banner-icon">&#9888;</span>
+    <strong>{{ getAlertCount() }} active alert{{ getAlertCount() > 1 ? 's' : '' }}</strong>
+    <span class="alert-banner-msg" *ngIf="getActiveAlerts().length > 0">&nbsp;— {{ getActiveAlerts()[0].message }}</span>
   </div>
 
-  <div class="dashboard-grid" *ngIf="!loading && !error">
-    <!-- Health Status Card -->
-    <div class="card health-card">
-      <h2>System Health</h2>
-      <div class="health-status" *ngIf="healthData">
-        <div class="status-item">
-          <span class="status-label">Service:</span>
-          <span class="status-value">{{ healthData.service }}</span>
+  <!-- API error banners -->
+  <div class="alert alert-warning" *ngIf="healthError">&#9888; {{ healthError }}</div>
+  <div class="alert alert-warning" *ngIf="metricsError">&#9888; {{ metricsError }}</div>
+
+  <!-- Loading skeleton -->
+  <div class="skeleton-grid" *ngIf="loading">
+    <div class="skeleton-card" *ngFor="let i of [1,2,3,4,5,6]"></div>
+  </div>
+
+  <div *ngIf="!loading">
+
+    <!-- ── Stat Summary Row ────────────────────────────────────────────────── -->
+    <div class="stat-row">
+
+      <div class="stat-card" [ngClass]="'stat-' + getStatusClass(healthData?.status || 'unknown')">
+        <div class="stat-icon">&#9679;</div>
+        <div class="stat-body">
+          <div class="stat-value">{{ healthData?.status | titlecase }}</div>
+          <div class="stat-label">System Status</div>
         </div>
-        <div class="status-item">
-          <span class="status-label">Version:</span>
-          <span class="status-value">{{ healthData.version }}</span>
+      </div>
+
+      <ng-container *ngIf="getSystemMetrics() as sys">
+        <div class="stat-card">
+          <div class="stat-icon">&#9729;</div>
+          <div class="stat-body">
+            <div class="stat-value">{{ sys.cpu_usage | number:'1.1-1' }}%</div>
+            <div class="stat-label">CPU Usage</div>
+            <div class="stat-bar"><div class="stat-bar-fill" [ngClass]="getUsageClass(sys.cpu_usage)" [style.width.%]="sys.cpu_usage"></div></div>
+          </div>
         </div>
-        <div class="status-item">
-          <span class="status-label">Status:</span>
-          <span class="status-value" [class]="getStatusClass(healthData.status)">
-            {{ healthData.status }}
+        <div class="stat-card">
+          <div class="stat-icon">&#128190;</div>
+          <div class="stat-body">
+            <div class="stat-value">{{ sys.memory_usage | number:'1.1-1' }}%</div>
+            <div class="stat-label">Memory Usage</div>
+            <div class="stat-bar"><div class="stat-bar-fill" [ngClass]="getUsageClass(sys.memory_usage)" [style.width.%]="sys.memory_usage"></div></div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">&#128456;</div>
+          <div class="stat-body">
+            <div class="stat-value">{{ sys.disk_usage | number:'1.1-1' }}%</div>
+            <div class="stat-label">Disk Usage</div>
+            <div class="stat-bar"><div class="stat-bar-fill" [ngClass]="getUsageClass(sys.disk_usage)" [style.width.%]="sys.disk_usage"></div></div>
+          </div>
+        </div>
+      </ng-container>
+
+      <div class="stat-card" *ngIf="getDatabaseMetrics() as db">
+        <div class="stat-icon">&#128279;</div>
+        <div class="stat-body">
+          <div class="stat-value">{{ db.connections }}</div>
+          <div class="stat-label">DB Connections</div>
+          <div class="stat-bar"><div class="stat-bar-fill" [ngClass]="getUsageClass(getConnectionPct())" [style.width.%]="getConnectionPct()"></div></div>
+        </div>
+      </div>
+
+      <div class="stat-card" [ngClass]="hasAlerts() ? 'stat-alert' : 'stat-ok'">
+        <div class="stat-icon">{{ hasAlerts() ? '&#9888;' : '&#10003;' }}</div>
+        <div class="stat-body">
+          <div class="stat-value">{{ getAlertCount() }}</div>
+          <div class="stat-label">Active Alerts</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ── Detail Row ─────────────────────────────────────────────────────── -->
+    <div class="detail-row">
+
+      <!-- System Health -->
+      <div class="card">
+        <div class="card-header">
+          <h2>&#9881; System Health</h2>
+          <span class="badge" [ngClass]="'badge-' + getStatusClass(healthData?.status || 'unknown')">
+            {{ healthData?.status | titlecase }}
           </span>
         </div>
-        <div class="status-item">
-          <span class="status-label">Last Check:</span>
-          <span class="status-value">{{ healthData.timestamp | date:'medium' }}</span>
+        <div class="detail-list" *ngIf="healthData">
+          <div class="detail-row-item">
+            <span class="detail-label">Service</span>
+            <span class="detail-value">{{ healthData.service }}</span>
+          </div>
+          <div class="detail-row-item">
+            <span class="detail-label">Version</span>
+            <span class="detail-value">v{{ healthData.version }}</span>
+          </div>
+          <div class="detail-row-item">
+            <span class="detail-label">Last Check</span>
+            <span class="detail-value">{{ healthData.timestamp | date:'HH:mm:ss, d MMM' }}</span>
+          </div>
+          <div class="detail-row-item" *ngIf="monitoringStatus?.last_check">
+            <span class="detail-label">Monitoring Check</span>
+            <span class="detail-value">{{ monitoringStatus.last_check | date:'HH:mm:ss' }}</span>
+          </div>
         </div>
+      </div>
+
+      <!-- DB Performance -->
+      <div class="card" *ngIf="getDatabaseMetrics() as db">
+        <div class="card-header">
+          <h2>&#128268; DB Performance</h2>
+        </div>
+        <div class="detail-list">
+          <div class="detail-row-item">
+            <span class="detail-label">Active connections</span>
+            <span class="detail-value highlight">{{ db.active }}</span>
+          </div>
+          <div class="detail-row-item">
+            <span class="detail-label">Idle connections</span>
+            <span class="detail-value">{{ db.idle }}</span>
+          </div>
+          <div class="detail-row-item">
+            <span class="detail-label">Total / Max</span>
+            <span class="detail-value">{{ db.connections }} / 100</span>
+          </div>
+          <div class="detail-row-item" *ngIf="db.size_bytes">
+            <span class="detail-label">Database size</span>
+            <span class="detail-value">{{ formatBytes(db.size_bytes) }}</span>
+          </div>
+        </div>
+        <div class="util-bar-wrap">
+          <div class="util-bar-label">
+            <span>Connection utilization</span><span>{{ getConnectionPct() }}%</span>
+          </div>
+          <div class="util-bar">
+            <div class="util-bar-fill" [ngClass]="getUsageClass(getConnectionPct())" [style.width.%]="getConnectionPct()"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Monitoring Status -->
+      <div class="card" *ngIf="monitoringStatus">
+        <div class="card-header">
+          <h2>&#128202; Monitoring</h2>
+          <span class="badge" [ngClass]="isMonitoringActive() ? 'badge-status-healthy' : 'badge-status-error'">
+            {{ isMonitoringActive() ? 'Active' : 'Inactive' }}
+          </span>
+        </div>
+        <div class="detail-list">
+          <div class="detail-row-item">
+            <span class="detail-label">Status</span>
+            <span class="detail-value">{{ monitoringStatus.status | titlecase }}</span>
+          </div>
+          <div class="detail-row-item">
+            <span class="detail-label">Check interval</span>
+            <span class="detail-value">{{ getMonitoringInterval() }}s</span>
+          </div>
+          <div class="detail-row-item" *ngIf="monitoringStatus.last_check">
+            <span class="detail-label">Last check</span>
+            <span class="detail-value">{{ monitoringStatus.last_check | date:'HH:mm:ss' }}</span>
+          </div>
+          <div class="detail-row-item">
+            <span class="detail-label">Auto-recovery</span>
+            <span class="detail-value">Enabled</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Active Alerts -->
+      <div class="card alerts-card">
+        <div class="card-header">
+          <h2>&#128276; Alerts</h2>
+          <span class="badge" [ngClass]="hasAlerts() ? 'badge-status-error' : 'badge-status-healthy'">
+            {{ hasAlerts() ? getAlertCount() + ' active' : 'All clear' }}
+          </span>
+        </div>
+        <div *ngIf="hasAlerts()">
+          <div class="alert-item" *ngFor="let alert of getActiveAlerts()">
+            <span class="alert-sev" [ngClass]="'sev-' + (alert.severity || 'medium').toLowerCase()">
+              {{ alert.severity || 'WARN' | uppercase }}
+            </span>
+            <span class="alert-msg">{{ alert.message }}</span>
+          </div>
+        </div>
+        <div class="empty-state" *ngIf="!hasAlerts()">
+          <span class="empty-icon">&#10003;</span>
+          <p>No active alerts — all systems nominal.</p>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ── Database Nodes ─────────────────────────────────────────────────── -->
+    <div class="section-title" *ngIf="depsData">
+      <h3>&#128268; Database Nodes</h3>
+    </div>
+    <div class="nodes-row" *ngIf="depsData">
+
+      <!-- Primary -->
+      <div class="node-card" [ngClass]="getPrimaryNode()?.status === 'healthy' ? 'node-healthy' : 'node-error'"
+           *ngIf="getPrimaryNode() as primary">
+        <div class="node-header">
+          <div class="node-role-wrap">
+            <span class="node-role">PRIMARY</span>
+            <span class="node-dot" [ngClass]="primary.status === 'healthy' ? 'dot-green' : 'dot-red'"></span>
+          </div>
+          <span class="node-badge" [ngClass]="primary.status === 'healthy' ? 'badge-ok' : 'badge-err'">
+            {{ primary.status | titlecase }}
+          </span>
+        </div>
+        <div class="node-details">
+          <div class="node-row" *ngIf="primary.active_connections != null">
+            <span>Active connections</span><strong>{{ primary.active_connections }}</strong>
+          </div>
+          <div class="node-row" *ngIf="primary.total_connections != null">
+            <span>Total connections</span><strong>{{ primary.total_connections }}</strong>
+          </div>
+          <div class="node-row" *ngIf="primary.version">
+            <span>Version</span><strong>{{ primary.version }}</strong>
+          </div>
+          <div class="node-row" *ngIf="primary.database_size_bytes != null">
+            <span>DB Size</span><strong>{{ formatBytes(primary.database_size_bytes) }}</strong>
+          </div>
+          <div class="node-row">
+            <span>SSL</span><strong>{{ primary.ssl_enabled ? 'Enabled' : 'Disabled' }}</strong>
+          </div>
+          <div class="node-row">
+            <span>Auth</span><strong>{{ primary.authentication }}</strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- Replica -->
+      <div class="node-card" [ngClass]="getReplicaNode()?.status === 'healthy' ? 'node-healthy' : (getReplicaNode()?.status === 'not_configured' ? 'node-muted' : 'node-error')"
+           *ngIf="getReplicaNode() as replica">
+        <div class="node-header">
+          <div class="node-role-wrap">
+            <span class="node-role">REPLICA</span>
+            <span class="node-dot"
+              [ngClass]="replica.status === 'healthy' ? 'dot-green' : (replica.status === 'not_configured' ? 'dot-grey' : 'dot-red')">
+            </span>
+          </div>
+          <span class="node-badge"
+            [ngClass]="replica.status === 'healthy' ? 'badge-ok' : (replica.status === 'not_configured' ? 'badge-muted' : 'badge-err')">
+            {{ replica.status === 'not_configured' ? 'Not configured' : (replica.status | titlecase) }}
+          </span>
+        </div>
+        <div class="node-details" *ngIf="replica.status !== 'not_configured'">
+          <div class="node-row" *ngIf="replica.active_connections != null">
+            <span>Active connections</span><strong>{{ replica.active_connections }}</strong>
+          </div>
+          <div class="node-row" *ngIf="replica.total_connections != null">
+            <span>Total connections</span><strong>{{ replica.total_connections }}</strong>
+          </div>
+          <div class="node-row" *ngIf="replica.version">
+            <span>Version</span><strong>{{ replica.version }}</strong>
+          </div>
+          <div class="node-row" *ngIf="replica.database_size_bytes != null">
+            <span>DB Size</span><strong>{{ formatBytes(replica.database_size_bytes) }}</strong>
+          </div>
+          <div class="node-row" *ngIf="replica.replication_lag_seconds != null">
+            <span>Replication lag</span>
+            <strong [class.text-warning]="replica.replication_lag_seconds > 5">
+              {{ replica.replication_lag_seconds | number:'1.2-2' }}s
+            </strong>
+          </div>
+          <div class="node-row">
+            <span>SSL</span><strong>{{ replica.ssl_enabled ? 'Enabled' : 'Disabled' }}</strong>
+          </div>
+          <div class="node-row" *ngIf="replica.error">
+            <span>Error</span><strong class="text-danger">{{ replica.error }}</strong>
+          </div>
+        </div>
+        <p class="node-hint" *ngIf="replica.status === 'not_configured'">
+          Add <code>REPLICA_URL=postgresql://...</code> to your <code>.env</code> to enable replica monitoring.
+        </p>
+      </div>
+
+    </div>
+
+    <!-- ── Recovery History ───────────────────────────────────────────────── -->
+    <div class="section-title">
+      <h3>&#9874; Recovery Operations</h3>
+      <a class="section-action" routerLink="/recovery">View all &rarr;</a>
+    </div>
+    <div class="card recovery-card">
+      <div *ngIf="recoveryHistory.length > 0">
+        <table class="rc-table">
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>Severity</th>
+              <th>Status</th>
+              <th>Reason</th>
+              <th>Started</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let op of recoveryHistory">
+              <td>{{ op.type }}</td>
+              <td><span class="sev-badge sev-{{ op.severity }}">{{ op.severity }}</span></td>
+              <td><span class="rc-status" [ngClass]="getRecoveryStatusClass(op.status)">{{ op.status }}</span></td>
+              <td class="rc-reason">{{ op.reason || '—' }}</td>
+              <td>{{ op.started_at | date:'HH:mm:ss, d MMM' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="empty-state" *ngIf="recoveryHistory.length === 0">
+        <span class="empty-icon">&#9989;</span>
+        <p>No recovery operations recorded yet.</p>
+        <small>Operations triggered via POST /api/v1/recovery/start will appear here.</small>
       </div>
     </div>
 
-    <!-- System Metrics Card -->
-    <!-- Metrics Overview Card -->
-    <div class="card metrics-card">
-      <h2>System Metrics</h2>
-      <div class="metrics-overview" *ngIf="metricsData">
-        <div class="metric-item">
-          <span class="metric-label">CPU Usage:</span>
-          <span class="metric-value">{{ metricsData.current.system.cpu_usage || 'N/A' }}%</span>
-        </div>
-        <div class="metric-item">
-          <span class="metric-label">Memory Usage:</span>
-          <span class="metric-value">{{ metricsData.current.system.memory_usage || 'N/A' }}%</span>
-        </div>
-        <div class="metric-item">
-          <span class="metric-label">Disk Usage:</span>
-          <span class="metric-value">{{ metricsData.current.system.disk_usage || 'N/A' }}%</span>
-        </div>
-        <div class="metric-item">
-          <span class="metric-label">Connections:</span>
-          <span class="metric-value">{{ metricsData.current.system.connections || 'N/A' }}</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Quick Actions Card -->
-    <div class="card actions-card">
-      <h2>Quick Actions</h2>
-      <div class="action-buttons">
-        <button class="action-btn" routerLink="/monitoring">
-          View Monitoring
-        </button>
-        <button class="action-btn" routerLink="/recovery">
-          Recovery Operations
-        </button>
-        <button class="action-btn" routerLink="/settings">
-          Settings
-        </button>
-      </div>
-    </div>
-
-    <!-- Recent Activity Card -->
-    <div class="card activity-card">
-      <h2>Recent Activity</h2>
-      <div class="activity-list">
-        <div class="activity-item">
-          <span class="activity-time">2 min ago</span>
-          <span class="activity-desc">Health check completed</span>
-        </div>
-        <div class="activity-item">
-          <span class="activity-time">5 min ago</span>
-          <span class="activity-desc">Metrics collected</span>
-        </div>
-        <div class="activity-item">
-          <span class="activity-time">15 min ago</span>
-          <span class="activity-desc">System status updated</span>
-        </div>
-      </div>
-    </div>
   </div>
+
 </div>
