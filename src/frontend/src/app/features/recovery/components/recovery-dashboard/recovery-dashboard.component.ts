@@ -1,27 +1,27 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Observable } from 'rxjs';
 import { ApiService, RecoveryRequest } from '../../../../core/services/api.service';
 
 export interface RecoveryOperation {
   id: string;
-  type: 'backup' | 'restore' | 'repair' | 'rebuild';
-  status: 'pending' | 'running' | 'completed' | 'failed';
-  progress: number;
-  startTime: Date;
-  endTime?: Date;
-  errorMessage?: string;
-  details?: string;
+  type: string;
+  status: string;
+  progress?: number;
+  start_time?: string;
+  end_time?: string;
+  reason?: string;
+  severity?: string;
+  details?: any;
+  error?: string;
 }
 
-export interface RecoveryStats {
-  totalOperations: number;
-  successfulOperations: number;
-  failedOperations: number;
-  pendingOperations: number;
-  runningOperations: number;
-  lastBackup?: Date;
-  lastRestore?: Date;
+interface ActionDef {
+  type: string;
+  label: string;
+  icon: string;
+  desc: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  color: string;
 }
 
 @Component({
@@ -31,161 +31,150 @@ export interface RecoveryStats {
   templateUrl: './recovery-dashboard.component.html',
   styleUrls: ['./recovery-dashboard.component.scss']
 })
-export class RecoveryDashboardComponent implements OnInit {
-  recoveryOperations: RecoveryOperation[] = [];
-  recoveryStats: RecoveryStats | null = null;
+export class RecoveryDashboardComponent implements OnInit, OnDestroy {
+  operations: RecoveryOperation[] = [];
   loading = true;
+  refreshing = false;
   error: string | null = null;
+  actionLoading: Record<string, boolean> = {};
+  actionSuccess: string | null = null;
+  expandedId: string | null = null;
+  statusFilter: string = 'all';
+
+  private refreshTimer: any;
+  readonly refreshInterval = 30;
+  countdown = 30;
+
+  readonly actions: ActionDef[] = [
+    { type: 'backup',  label: 'Backup',  icon: '💾', desc: 'Create a full snapshot of the primary database',            severity: 'low',      color: 'act-blue'   },
+    { type: 'restore', label: 'Restore', icon: '🔄', desc: 'Restore database state from the latest backup',            severity: 'high',     color: 'act-amber'  },
+    { type: 'repair',  label: 'Repair',  icon: '🔧', desc: 'Repair corrupted indexes and vacuum dead tuples',          severity: 'medium',   color: 'act-indigo' },
+    { type: 'rebuild', label: 'Rebuild', icon: '🏗️', desc: 'Rebuild replica from primary (full re-sync)',             severity: 'critical', color: 'act-red'    },
+  ];
 
   constructor(private apiService: ApiService) {}
 
   ngOnInit(): void {
-    this.loadRecoveryData();
+    this.load();
+    this.refreshTimer = setInterval(() => {
+      this.countdown--;
+      if (this.countdown <= 0) { this.countdown = this.refreshInterval; this.silentRefresh(); }
+    }, 1000);
   }
 
-  loadRecoveryData(): void {
+  ngOnDestroy(): void {
+    if (this.refreshTimer) clearInterval(this.refreshTimer);
+  }
+
+  load(): void {
     this.loading = true;
     this.error = null;
-
-    // Load recovery history from backend
     this.apiService.getRecoveryHistory().subscribe({
-      next: (history) => {
-        this.recoveryOperations = history;
-        // Calculate stats from operations
-        this.calculateStats();
+      next: (res) => {
+        this.operations = Array.isArray(res) ? res : (res?.recoveries ?? []);
         this.loading = false;
       },
-      error: (err) => {
-        this.error = 'Failed to load recovery data';
-        this.loading = false;
-      }
+      error: () => { this.error = 'Unable to load recovery history'; this.loading = false; }
     });
   }
 
-  private calculateStats(): void {
-    const total = this.recoveryOperations.length;
-    const successful = this.recoveryOperations.filter(op => op.status === 'completed').length;
-    const failed = this.recoveryOperations.filter(op => op.status === 'failed').length;
-    const pending = this.recoveryOperations.filter(op => op.status === 'pending').length;
-    const running = this.recoveryOperations.filter(op => op.status === 'running').length;
-
-    const completedOperations = this.recoveryOperations.filter(op => op.status === 'completed');
-    const lastBackup = completedOperations
-      .filter(op => op.type === 'backup')
-      .sort((a, b) => new Date(b.endTime!).getTime() - new Date(a.endTime!).getTime())[0];
-    const lastRestore = completedOperations
-      .filter(op => op.type === 'restore')
-      .sort((a, b) => new Date(b.endTime!).getTime() - new Date(a.endTime!).getTime())[0];
-
-    this.recoveryStats = {
-      totalOperations: total,
-      successfulOperations: successful,
-      failedOperations: failed,
-      pendingOperations: pending,
-      runningOperations: running,
-      lastBackup: lastBackup?.endTime,
-      lastRestore: lastRestore?.endTime
-    };
+  silentRefresh(): void {
+    this.refreshing = true;
+    this.apiService.getRecoveryHistory().subscribe({
+      next: (res) => { this.operations = Array.isArray(res) ? res : (res?.recoveries ?? []); this.refreshing = false; },
+      error: () => { this.refreshing = false; }
+    });
   }
 
-  refreshData(): void {
-    this.loadRecoveryData();
-  }
+  manualRefresh(): void { this.countdown = this.refreshInterval; this.load(); }
 
-  startNewRecovery(type: string): void {
-    const request: RecoveryRequest = {
-      type: type,
-      reason: `Starting ${type} operation from dashboard`,
-      severity: 'medium'
-    };
-
+  startAction(type: string, severity: string): void {
+    this.actionLoading[type] = true;
+    this.actionSuccess = null;
+    const request: RecoveryRequest = { type, reason: `Manual ${type} triggered from dashboard`, severity };
     this.apiService.startRecovery(request).subscribe({
-      next: () => {
-        this.loadRecoveryData(); // Refresh data after starting
+      next: (res) => {
+        this.actionLoading[type] = false;
+        this.actionSuccess = type;
+        setTimeout(() => { this.actionSuccess = null; }, 3000);
+        this.silentRefresh();
       },
-      error: () => {
-        this.error = `Failed to start ${type} operation`;
-      }
+      error: () => { this.actionLoading[type] = false; this.error = `Failed to start ${type} operation`; }
     });
   }
 
-  cancelOperation(operationId: string): void {
-    this.apiService.cancelRecovery(operationId).subscribe({
-      next: () => {
-        this.loadRecoveryData(); // Refresh data after canceling
-      },
-      error: () => {
-        this.error = 'Failed to cancel operation';
-      }
+  cancelOp(id: string): void {
+    this.apiService.cancelRecovery(id).subscribe({
+      next: () => this.silentRefresh(),
+      error: () => { this.error = 'Failed to cancel operation'; }
     });
   }
 
-  retryOperation(operationId: string): void {
-    const operation = this.recoveryOperations.find(op => op.id === operationId);
-    if (operation) {
-      const request: RecoveryRequest = {
-        type: operation.type,
-        reason: `Retrying ${operation.type} operation`,
-        severity: 'medium'
-      };
-      
-      this.apiService.startRecovery(request).subscribe({
-        next: () => {
-          this.loadRecoveryData(); // Refresh data after retrying
-        },
-        error: () => {
-          this.error = 'Failed to retry operation';
-        }
-      });
-    }
+  retryOp(op: RecoveryOperation): void {
+    this.startAction(op.type, op.severity ?? 'medium');
   }
 
-  viewOperationDetails(operationId: string): void {
-    console.log(`Viewing details for operation ${operationId}`);
-    // TODO: Navigate to operation details page or open modal
+  toggleExpand(id: string): void {
+    this.expandedId = this.expandedId === id ? null : id;
   }
 
-  getStatusClass(status: string): string {
-    switch (status.toLowerCase()) {
-      case 'completed':
-        return 'status-completed';
+  // ── Computed ────────────────────────────────────────────────────────────────
+  get filtered(): RecoveryOperation[] {
+    if (this.statusFilter === 'all') return this.operations;
+    return this.operations.filter(o => o.status === this.statusFilter);
+  }
+
+  get total(): number     { return this.operations.length; }
+  get successful(): number { return this.operations.filter(o => o.status === 'completed').length; }
+  get failed(): number    { return this.operations.filter(o => o.status === 'failed').length; }
+  get running(): number   { return this.operations.filter(o => o.status === 'running' || o.status === 'in_progress').length; }
+  get successRate(): number {
+    return this.total > 0 ? Math.round((this.successful / this.total) * 100) : 0;
+  }
+
+  // ── Helpers ─────────────────────────────────────────────────────────────────
+  statusClass(s: string): string {
+    switch ((s || '').toLowerCase()) {
+      case 'completed':   return 'st-ok';
       case 'running':
-        return 'status-running';
-      case 'pending':
-        return 'status-pending';
-      case 'failed':
-        return 'status-failed';
-      default:
-        return 'status-unknown';
+      case 'in_progress': return 'st-run';
+      case 'pending':     return 'st-pend';
+      case 'failed':      return 'st-err';
+      case 'cancelled':   return 'st-cancel';
+      default:            return 'st-unknown';
     }
   }
 
-  getTypeIcon(type: string): string {
-    switch (type.toLowerCase()) {
-      case 'backup':
-        return '💾';
-      case 'restore':
-        return '🔄';
-      case 'repair':
-        return '🔧';
-      case 'rebuild':
-        return '🏗️';
-      default:
-        return '📋';
+  statusLabel(s: string): string {
+    switch ((s || '').toLowerCase()) {
+      case 'completed':   return '✓ Completed';
+      case 'running':
+      case 'in_progress': return '⟳ Running';
+      case 'pending':     return '○ Pending';
+      case 'failed':      return '✕ Failed';
+      case 'cancelled':   return '— Cancelled';
+      default:            return s;
     }
   }
 
-  formatDate(date: Date): string {
-    return date.toLocaleString();
+  typeIcon(t: string): string {
+    const a = this.actions.find(x => x.type === t);
+    return a ? a.icon : '📋';
   }
 
-  getProgressColor(progress: number): string {
-    if (progress >= 80) return '#4caf50';
-    if (progress >= 50) return '#ff9800';
-    return '#f44336';
+  formatTs(ts: string | undefined): string {
+    if (!ts) return '—';
+    const d = new Date(ts);
+    return isNaN(d.getTime()) ? ts : d.toLocaleString();
   }
 
-  trackByOperationId(index: number, operation: RecoveryOperation): string {
-    return operation.id;
+  duration(op: RecoveryOperation): string {
+    if (!op.start_time) return '—';
+    const end = op.end_time ? new Date(op.end_time) : new Date();
+    const secs = Math.round((end.getTime() - new Date(op.start_time).getTime()) / 1000);
+    if (secs < 60) return `${secs}s`;
+    return `${Math.floor(secs / 60)}m ${secs % 60}s`;
   }
+
+  trackById(_: number, op: RecoveryOperation): string { return op.id; }
 }

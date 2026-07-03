@@ -1,91 +1,212 @@
-<div class="recovery-dashboard">
-  <div class="header">
-    <h1>Recovery Dashboard</h1>
-    <button (click)="refreshData()" [disabled]="loading">
-      <span *ngIf="loading">⏳</span>
-      Refresh
-    </button>
+<div class="rd-wrap">
+
+  <!-- ── Page Header ─────────────────────────────────────────────────────── -->
+  <div class="rd-header">
+    <div class="rd-title-block">
+      <h1>Recovery Dashboard</h1>
+      <p class="rd-subtitle">Manage and monitor database backup, restore, and repair operations</p>
+    </div>
+    <div class="rd-header-right">
+      <span class="live-pill" [class.spinning]="refreshing">&#9679; Live</span>
+      <span class="countdown-badge">&#8635; {{ countdown }}s</span>
+      <button class="rd-refresh-btn" (click)="manualRefresh()" [disabled]="loading">
+        {{ loading ? '⏳' : '&#8635;' }} Refresh
+      </button>
+    </div>
   </div>
 
-  <div class="error" *ngIf="error">{{ error }}</div>
+  <!-- ── Error Banner ────────────────────────────────────────────────────── -->
+  <div class="rd-error" *ngIf="error">
+    <span>&#9888; {{ error }}</span>
+    <button (click)="error = null">&#10005;</button>
+  </div>
 
-  <div class="content" *ngIf="!loading && !error">
-    <!-- Stats -->
-    <div class="card">
-      <h2>Statistics</h2>
-      <div class="stats" *ngIf="recoveryStats">
-        <div class="stat">
-          <span>Total</span>
-          <span>{{ recoveryStats.totalOperations }}</span>
+  <!-- ── Action Success Toast ────────────────────────────────────────────── -->
+  <div class="rd-toast" *ngIf="actionSuccess">
+    &#10003; {{ actionSuccess | titlecase }} operation started successfully
+  </div>
+
+  <!-- ── Loading skeleton ────────────────────────────────────────────────── -->
+  <ng-container *ngIf="loading">
+    <div class="kpi-row">
+      <div class="kpi-card skeleton" *ngFor="let _ of [1,2,3,4]"></div>
+    </div>
+    <div class="skeleton sk-full"></div>
+    <div class="skeleton sk-full"></div>
+  </ng-container>
+
+  <ng-container *ngIf="!loading">
+
+    <!-- ── KPI Row ─────────────────────────────────────────────────────── -->
+    <div class="kpi-row">
+      <div class="kpi-card">
+        <span class="kpi-icon">&#128203;</span>
+        <div class="kpi-body">
+          <span class="kpi-val">{{ total }}</span>
+          <span class="kpi-label">Total Operations</span>
         </div>
-        <div class="stat success">
-          <span>Success</span>
-          <span>{{ recoveryStats.successfulOperations }}</span>
+      </div>
+      <div class="kpi-card kpi-ok">
+        <span class="kpi-icon">&#10003;</span>
+        <div class="kpi-body">
+          <span class="kpi-val">{{ successRate }}%</span>
+          <span class="kpi-label">Success Rate</span>
+          <span class="kpi-sub">{{ successful }} completed</span>
         </div>
-        <div class="stat error">
-          <span>Failed</span>
-          <span>{{ recoveryStats.failedOperations }}</span>
+      </div>
+      <div class="kpi-card" [class.kpi-err]="failed > 0">
+        <span class="kpi-icon">&#10005;</span>
+        <div class="kpi-body">
+          <span class="kpi-val">{{ failed }}</span>
+          <span class="kpi-label">Failed</span>
         </div>
-        <div class="stat running">
-          <span>Running</span>
-          <span>{{ recoveryStats.runningOperations }}</span>
+      </div>
+      <div class="kpi-card" [class.kpi-run]="running > 0">
+        <span class="kpi-icon">&#9654;</span>
+        <div class="kpi-body">
+          <span class="kpi-val">{{ running }}</span>
+          <span class="kpi-label">Running</span>
         </div>
       </div>
     </div>
 
-    <!-- Actions -->
-    <div class="card">
-      <h2>Actions</h2>
-      <div class="actions">
-        <button (click)="startNewRecovery('backup')">💾 Backup</button>
-        <button (click)="startNewRecovery('restore')">🔄 Restore</button>
-        <button (click)="startNewRecovery('repair')">🔧 Repair</button>
-        <button (click)="startNewRecovery('rebuild')">🏗️ Rebuild</button>
+    <!-- ── Quick Actions ────────────────────────────────────────────────── -->
+    <div class="section-hd">
+      <h3>&#9889; Quick Actions</h3>
+      <span class="section-sub">Trigger recovery operations on the database</span>
+    </div>
+    <div class="actions-grid">
+      <div class="action-card" *ngFor="let a of actions" [ngClass]="a.color">
+        <div class="ac-top">
+          <span class="ac-icon">{{ a.icon }}</span>
+          <div class="ac-info">
+            <strong>{{ a.label }}</strong>
+            <span>{{ a.desc }}</span>
+          </div>
+          <span class="ac-severity sev-{{ a.severity }}">{{ a.severity }}</span>
+        </div>
+        <button class="ac-btn" [disabled]="actionLoading[a.type]"
+                (click)="startAction(a.type, a.severity)">
+          <span *ngIf="!actionLoading[a.type]">Run {{ a.label }}</span>
+          <span *ngIf="actionLoading[a.type]">&#9203; Starting…</span>
+        </button>
+        <div class="ac-done" *ngIf="actionSuccess === a.type">&#10003; Started!</div>
       </div>
     </div>
 
-    <!-- Operations -->
-    <div class="card">
-      <h2>Operations</h2>
-      <div class="operations">
-        <div class="operation" 
-             *ngFor="let operation of recoveryOperations; trackBy: trackByOperationId">
-          <div class="op-header">
-            <span>{{ getTypeIcon(operation.type) }} {{ operation.type | titlecase }}</span>
-            <span class="status {{ getStatusClass(operation.status) }}">
-              {{ operation.status }}
+    <!-- ── Operations History ────────────────────────────────────────────── -->
+    <div class="section-hd ops-hd">
+      <h3>&#128203; Operation History</h3>
+      <div class="filter-row">
+        <button class="filter-btn" [class.active]="statusFilter==='all'"         (click)="statusFilter='all'">All ({{ total }})</button>
+        <button class="filter-btn" [class.active]="statusFilter==='completed'"   (click)="statusFilter='completed'">Completed ({{ successful }})</button>
+        <button class="filter-btn" [class.active]="statusFilter==='failed'"      (click)="statusFilter='failed'">Failed ({{ failed }})</button>
+        <button class="filter-btn" [class.active]="statusFilter==='running'"     (click)="statusFilter='running'">Running ({{ running }})</button>
+      </div>
+    </div>
+
+    <!-- Operations list -->
+    <div class="ops-list" *ngIf="filtered.length > 0">
+      <div class="op-row" *ngFor="let op of filtered; trackBy: trackById"
+           [ngClass]="statusClass(op.status)">
+        <!-- Left accent + icon -->
+        <div class="op-type-col">
+          <span class="op-icon">{{ typeIcon(op.type) }}</span>
+          <span class="op-type-label">{{ op.type | titlecase }}</span>
+        </div>
+
+        <!-- Status badge -->
+        <span class="op-badge" [ngClass]="statusClass(op.status)">
+          {{ statusLabel(op.status) }}
+        </span>
+
+        <!-- Meta -->
+        <div class="op-meta">
+          <span class="op-meta-item" title="Start time">&#128336; {{ formatTs(op.start_time) }}</span>
+          <span class="op-meta-item" title="Duration">&#9202; {{ duration(op) }}</span>
+          <span class="op-meta-item op-id" title="Operation ID">{{ op.id }}</span>
+        </div>
+
+        <!-- Progress bar (running only) -->
+        <div class="op-progress" *ngIf="(op.status === 'running' || op.status === 'in_progress') && op.progress != null">
+          <div class="prog-track">
+            <div class="prog-fill" [style.width.%]="op.progress"></div>
+          </div>
+          <span>{{ op.progress }}%</span>
+        </div>
+
+        <!-- Row actions -->
+        <div class="op-actions">
+          <button class="oa-btn" title="Show details" (click)="toggleExpand(op.id)">
+            {{ expandedId === op.id ? '▲' : '▼' }}
+          </button>
+          <button class="oa-btn oa-retry" *ngIf="op.status === 'failed'"
+                  title="Retry" (click)="retryOp(op)">&#8635; Retry</button>
+          <button class="oa-btn oa-cancel"
+                  *ngIf="op.status === 'running' || op.status === 'in_progress' || op.status === 'pending'"
+                  title="Cancel" (click)="cancelOp(op.id)">&#10005; Cancel</button>
+        </div>
+
+        <!-- Expanded detail panel -->
+        <div class="op-detail" *ngIf="expandedId === op.id">
+          <div class="od-row" *ngIf="op.reason"><span class="od-label">Reason</span><span>{{ op.reason }}</span></div>
+          <div class="od-row" *ngIf="op.severity"><span class="od-label">Severity</span>
+            <span class="sev-{{ op.severity }}">{{ op.severity }}</span>
+          </div>
+          <div class="od-row" *ngIf="op.end_time"><span class="od-label">Completed</span><span>{{ formatTs(op.end_time) }}</span></div>
+          <div class="od-row" *ngIf="op.details?.['duration_seconds'] != null">
+            <span class="od-label">Duration</span><span>{{ op.details['duration_seconds'] }}s</span>
+          </div>
+          <div class="od-row od-file" *ngIf="op.details?.['backup_file']">
+            <span class="od-label">&#128190; Backup file</span>
+            <code class="od-path">{{ op.details['backup_file'] }}</code>
+            <span class="od-size" *ngIf="op.details['size_kb']">{{ op.details['size_kb'] }} KB</span>
+            <a class="od-link" target="_blank"
+               [href]="'http://localhost:8000/api/v1/recovery/backup-preview?path=' + op.details['backup_file']">
+              &#128196; Preview
+            </a>
+          </div>
+          <div class="od-row od-file" *ngIf="op.details?.['restored_from']">
+            <span class="od-label">&#8635; Restored from</span>
+            <code class="od-path">{{ op.details['restored_from'] }}</code>
+            <a class="od-link" target="_blank"
+               [href]="'http://localhost:8000/api/v1/recovery/backup-preview?path=' + op.details['restored_from']">
+              &#128196; Preview
+            </a>
+          </div>
+          <div class="od-row" *ngIf="op.details?.['action']">
+            <span class="od-label">Action</span><span>{{ op.details['action'] }}</span>
+            <a class="od-link" *ngIf="op.type === 'repair'"
+               href="http://localhost:8000/api/v1/recovery/db-report" target="_blank">
+              &#128202; View DB Report
+            </a>
+          </div>
+          <div class="od-row" *ngIf="op.details?.['container_status_before']">
+            <span class="od-label">Container was</span>
+            <span>{{ op.details['container_status_before'] }}</span>
+          </div>
+          <div class="od-row" *ngIf="op.details?.['replica_was_in_recovery'] != null">
+            <span class="od-label">Replica state</span>
+            <span [class.od-ok]="op.details['replica_was_in_recovery']==='true'"
+                  [class.od-warn]="op.details['replica_was_in_recovery']!=='true'">
+              {{ op.details['replica_was_in_recovery'] === 'true' ? '✓ Was in recovery (streaming)' : '✕ Not replicating' }}
             </span>
           </div>
-          
-          <div class="progress" *ngIf="operation.status === 'running'">
-            <div class="bar" 
-                 [style.width.%]="operation.progress"
-                 [style.background]="getProgressColor(operation.progress)">
-            </div>
-            <span>{{ operation.progress }}%</span>
+          <div class="od-row" *ngIf="op.details?.['replication_lag_seconds_before'] != null">
+            <span class="od-label">Lag before</span>
+            <span>{{ op.details['replication_lag_seconds_before'] }}s</span>
           </div>
-
-          <div class="details">
-            <small>ID: {{ operation.id }}</small>
-            <div *ngIf="operation.details">{{ operation.details }}</div>
-            <div class="error" *ngIf="operation.errorMessage">
-              {{ operation.errorMessage }}
-            </div>
-          </div>
-
-          <div class="op-actions">
-            <button (click)="viewOperationDetails(operation.id)">👁️</button>
-            <button *ngIf="operation.status === 'failed'" 
-                    (click)="retryOperation(operation.id)">🔄</button>
-            <button *ngIf="operation.status === 'running' || operation.status === 'pending'" 
-                    (click)="cancelOperation(operation.id)">❌</button>
-          </div>
-        </div>
-
-        <div class="empty" *ngIf="recoveryOperations.length === 0">
-          No operations found
+          <div class="od-row od-err" *ngIf="op.error"><span class="od-label">Error</span><span>{{ op.error }}</span></div>
         </div>
       </div>
     </div>
-  </div>
+
+    <!-- Empty state -->
+    <div class="ops-empty" *ngIf="filtered.length === 0">
+      <span class="empty-icon">&#128203;</span>
+      <p>{{ statusFilter === 'all' ? 'No recovery operations yet' : 'No ' + statusFilter + ' operations' }}</p>
+      <small>Use the Quick Actions above to start a recovery operation</small>
+    </div>
+
+  </ng-container>
 </div>
