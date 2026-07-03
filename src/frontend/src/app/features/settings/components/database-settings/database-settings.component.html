@@ -1,145 +1,118 @@
-<div class="database-settings">
-  <div class="form-header">
-    <h2>Database Settings</h2>
+<div class="spage">
+
+  <div class="s-toast" [class.show]="showToast" [class.toast-err]="toastType==='error'">{{ toastMsg }}</div>
+
+  <div class="spage-header">
+    <div>
+      <h1 class="spage-title">🗄️ Database Settings</h1>
+      <p class="spage-sub">Connection URLs, SSL and connection pool</p>
+    </div>
+    <div class="dirty-badge" *ngIf="isDirty">● Unsaved changes</div>
   </div>
 
-  <form class="database-settings-form" (ngSubmit)="saveSettings()">
-    <!-- Database Connection Section -->
-    <div class="form-section">
-      <h4>Database Connection</h4>
-      
-      <div class="form-group">
-        <label for="primaryUrl">Primary Database URL</label>
-        <input 
-          id="primaryUrl" 
-          type="text" 
-          [(ngModel)]="config.primaryUrl" 
-          name="primaryUrl"
-          placeholder="postgresql://localhost:5432/monitoring_db"
-          class="form-control" />
-      </div>
+  <!-- Connections -->
+  <div class="s-card">
+    <div class="s-card-title">Connections</div>
 
-      <div class="form-group">
-        <label for="replicaUrl">Replica Database URL</label>
-        <input 
-          id="replicaUrl" 
-          type="text" 
-          [(ngModel)]="config.replicaUrl" 
-          name="replicaUrl"
-          placeholder="postgresql://replica:5432/monitoring_db"
-          class="form-control" />
+    <div class="field-group" style="margin-bottom:.85rem">
+      <label class="field-label">Primary Database URL</label>
+      <div class="input-wrap">
+        <input class="s-input mono" [type]="showPrimary ? 'text' : 'password'"
+               [(ngModel)]="config.primaryUrl" (ngModelChange)="onChange()"
+               placeholder="postgresql://user:pass@host:5432/db">
+        <button class="input-btn" type="button" (click)="showPrimary=!showPrimary">{{ showPrimary ? '🙈' : '👁️' }}</button>
       </div>
     </div>
 
-    <!-- SSL Configuration Section -->
-    <div class="form-section">
-      <h4>SSL Configuration</h4>
-      
-      <div class="form-group">
-        <label class="checkbox-label">
-          <input 
-            type="checkbox" 
-            [(ngModel)]="config.sslEnabled" 
-            name="sslEnabled"
-            (change)="onSslToggle()" />
-          Enable SSL/TLS
-        </label>
+    <div class="field-group" style="margin-bottom:1rem">
+      <label class="field-label">Replica Database URL</label>
+      <div class="input-wrap">
+        <input class="s-input mono" [type]="showReplica ? 'text' : 'password'"
+               [(ngModel)]="config.replicaUrl" (ngModelChange)="onChange()"
+               placeholder="postgresql://user:pass@host:5433/db">
+        <button class="input-btn" type="button" (click)="showReplica=!showReplica">{{ showReplica ? '🙈' : '👁️' }}</button>
       </div>
+    </div>
 
-      <div class="ssl-section" *ngIf="config.sslEnabled">
-        <div class="form-group">
-          <label for="sslCertFile">SSL Certificate File</label>
-          <input 
-            id="sslCertFile" 
-            type="text" 
-            [(ngModel)]="config.sslCertFile" 
-            name="sslCertFile"
-            placeholder="/path/to/cert.pem"
-            class="form-control" />
+    <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
+      <button class="btn-test" type="button" (click)="testConnection()" [disabled]="connStatus==='testing'">
+        {{ connStatus === 'testing' ? '⟳ Testing…' : '⚡ Test Connection' }}
+      </button>
+      <span *ngIf="connStatus !== 'idle'" class="conn-badge" [class.ok]="connStatus==='ok'" [class.fail]="connStatus==='fail'" [class.testing]="connStatus==='testing'">
+        {{ connStatus === 'ok' ? '✓' : connStatus === 'fail' ? '✕' : '…' }} {{ connMsg }}
+      </span>
+    </div>
+  </div>
+
+  <!-- SSL -->
+  <div class="s-card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem">
+      <div class="s-card-title" style="margin:0">SSL / TLS</div>
+      <label class="sw">
+        <input type="checkbox" [(ngModel)]="config.sslEnabled" (ngModelChange)="onSslToggle()">
+        <span class="sw-track"></span>
+      </label>
+    </div>
+
+    <div *ngIf="!config.sslEnabled" style="font-size:.8rem;color:#94a3b8">Enable SSL to configure certificate paths and verification mode.</div>
+
+    <div *ngIf="config.sslEnabled">
+      <div class="grid2" style="margin-bottom:.85rem">
+        <div class="field-group">
+          <label class="field-label">Certificate File</label>
+          <input class="s-input mono" type="text" [(ngModel)]="config.sslCertFile" (ngModelChange)="onChange()" placeholder="/etc/ssl/certs/client.crt">
         </div>
-
-        <div class="form-group">
-          <label for="sslKeyFile">SSL Key File</label>
-          <input 
-            id="sslKeyFile" 
-            type="text" 
-            [(ngModel)]="config.sslKeyFile" 
-            name="sslKeyFile"
-            placeholder="/path/to/key.pem"
-            class="form-control" />
+        <div class="field-group">
+          <label class="field-label">Key File</label>
+          <input class="s-input mono" type="text" [(ngModel)]="config.sslKeyFile" (ngModelChange)="onChange()" placeholder="/etc/ssl/private/client.key">
         </div>
-
-        <div class="form-group">
-          <label for="sslCaFile">SSL CA File</label>
-          <input 
-            id="sslCaFile" 
-            type="text" 
-            [(ngModel)]="config.sslCaFile" 
-            name="sslCaFile"
-            placeholder="/path/to/ca.pem"
-            class="form-control" />
+      </div>
+      <div class="grid2">
+        <div class="field-group">
+          <label class="field-label">CA File</label>
+          <input class="s-input mono" type="text" [(ngModel)]="config.sslCaFile" (ngModelChange)="onChange()" placeholder="/etc/ssl/certs/ca.pem">
         </div>
-
-        <div class="form-group">
-          <label for="sslVerify">SSL Verification</label>
-          <select id="sslVerify" [(ngModel)]="config.sslVerify" name="sslVerify" class="form-control">
-            <option *ngFor="let option of sslOptions" [value]="option.value">
-              {{ option.label }}
-            </option>
+        <div class="field-group">
+          <label class="field-label">Verification Mode</label>
+          <select class="s-select" [(ngModel)]="config.sslVerify" (ngModelChange)="onChange()">
+            <option *ngFor="let o of sslOptions" [value]="o.value">{{ o.label }}</option>
           </select>
         </div>
       </div>
     </div>
+  </div>
 
-    <!-- Connection Pool Section -->
-    <div class="form-section">
-      <h4>Connection Pool</h4>
-      
-      <div class="form-group">
-        <label for="maxConnections">Max Connections</label>
-        <input 
-          id="maxConnections" 
-          type="number" 
-          [(ngModel)]="config.maxConnections" 
-          name="maxConnections"
-          min="1" 
-          max="1000"
-          class="form-control" />
-      </div>
-
-      <div class="form-group">
-        <label for="minConnections">Min Connections</label>
-        <input 
-          id="minConnections" 
-          type="number" 
-          [(ngModel)]="config.minConnections" 
-          name="minConnections"
-          min="1" 
-          max="100"
-          class="form-control" />
-      </div>
-
-      <div class="form-group">
-        <label for="commandTimeout">Command Timeout (seconds)</label>
-        <input 
-          id="commandTimeout" 
-          type="number" 
-          [(ngModel)]="config.commandTimeout" 
-          name="commandTimeout"
-          min="1" 
-          max="300"
-          class="form-control" />
+  <!-- Connection Pool -->
+  <div class="s-card">
+    <div class="s-card-title">Connection Pool</div>
+    <div class="field-group" style="margin-bottom:1rem">
+      <label class="field-label">Max Connections &nbsp;<strong>{{ config.maxConnections }}</strong></label>
+      <div class="range-row">
+        <input type="range" min="5" max="500" step="5" [(ngModel)]="config.maxConnections" (ngModelChange)="onChange()">
+        <span class="range-val">{{ config.maxConnections }}</span>
       </div>
     </div>
-
-    <!-- Form Actions -->
-    <div class="form-actions">
-      <button type="button" class="btn btn-secondary" (click)="resetSettings()">
-        Reset to Defaults
-      </button>
-      <button type="submit" class="btn btn-primary">
-        Save Settings
-      </button>
+    <div class="field-group" style="margin-bottom:1rem">
+      <label class="field-label">Min Connections &nbsp;<strong>{{ config.minConnections }}</strong></label>
+      <div class="range-row">
+        <input type="range" min="1" max="50" step="1" [(ngModel)]="config.minConnections" (ngModelChange)="onChange()">
+        <span class="range-val">{{ config.minConnections }}</span>
+      </div>
     </div>
-  </form>
+    <div class="field-group">
+      <label class="field-label">Command Timeout (seconds) &nbsp;<strong>{{ config.commandTimeout }}s</strong></label>
+      <div class="range-row">
+        <input type="range" min="5" max="300" step="5" [(ngModel)]="config.commandTimeout" (ngModelChange)="onChange()">
+        <span class="range-val">{{ config.commandTimeout }}s</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="save-bar">
+    <button class="btn-ghost" (click)="reset()">Reset to defaults</button>
+    <button class="btn-save" (click)="save()" [class.btn-save-active]="isDirty">
+      {{ isDirty ? 'Save Changes' : '✓ Saved' }}
+    </button>
+  </div>
+
 </div>
