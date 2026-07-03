@@ -1,73 +1,305 @@
-<div class="monitoring-container">
-  <div class="monitoring-header">
-    <h1>System Monitoring</h1>
-    <button class="refresh-btn" (click)="refreshData()" [disabled]="loading">
-      <span class="loading-spinner" *ngIf="loading"></span>
-      Refresh
-    </button>
+<div class="mon-container">
+
+  <!-- ── Page Header ──────────────────────────────────────────────────────── -->
+  <div class="page-header">
+    <div class="page-header-left">
+      <div class="page-title-row">
+        <h1>System Monitoring</h1>
+        <div class="live-pill" [class.live-active]="monitoringStatus?.is_monitoring">
+          <span class="live-dot"></span>
+          <span>{{ monitoringStatus?.is_monitoring ? 'Live' : 'Inactive' }}</span>
+        </div>
+      </div>
+      <p class="page-sub" *ngIf="monitoringStatus">
+        Last check {{ monitoringStatus.last_check | date:'HH:mm:ss' }}
+        &nbsp;·&nbsp; every {{ monitoringStatus.interval_seconds }}s
+        &nbsp;·&nbsp; <span [ngClass]="getHealthScore().cls + '-txt'">{{ getHealthScore().label }}</span>
+      </p>
+    </div>
+    <div class="page-header-right">
+      <div class="ar-pill" [class.ar-on]="autoRefreshEnabled">
+        <input type="checkbox" id="ar" [checked]="autoRefreshEnabled" (change)="toggleAutoRefresh()">
+        <label for="ar">Auto-refresh</label>
+        <span class="ar-cd" *ngIf="autoRefreshEnabled">{{ countdown }}s</span>
+      </div>
+      <button class="btn-primary" (click)="refreshData()" [disabled]="isFetching">
+        <span [class.spin]="isFetching">&#8635;</span>
+        {{ isFetching ? 'Refreshing…' : 'Refresh' }}
+      </button>
+    </div>
   </div>
 
-  <div class="error-message" *ngIf="error">
-    {{ error }}
+  <!-- ── Skeleton ─────────────────────────────────────────────────────────── -->
+  <div class="skeleton-row" *ngIf="loading">
+    <div class="skel" *ngFor="let i of [1,2,3,4]"></div>
+    <div class="skel skel-wide" *ngFor="let i of [1,2]"></div>
+    <div class="skel skel-wide"></div>
   </div>
 
-  <div class="monitoring-grid" *ngIf="!loading && !error">
-    <!-- Alerts Panel -->
-    <app-alerts-panel [alerts]="alerts" [maxAlerts]="10" [showFilters]="true"></app-alerts-panel>
+  <ng-container *ngIf="!loading">
 
-    <!-- Metrics Overview -->
-    <div class="card metrics-card">
-      <h2>Real-time Metrics</h2>
-      <div class="metrics-grid" *ngIf="metricsData">
-        <div class="metric-item">
-          <span class="metric-label">Database Connections:</span>
-          <span class="metric-value">{{ metricsData.current?.database?.connections || 'N/A' }}</span>
+    <!-- ── KPI Row ───────────────────────────────────────────────────────── -->
+    <div class="kpi-grid">
+
+      <!-- DB Status -->
+      <div class="kpi-card" [ngClass]="'kpi-' + (getDB()?.status === 'healthy' ? 'ok' : getDB()?.status ? 'err' : 'unknown')">
+        <div class="kpi-icon-wrap"><span class="kpi-icon">🗄️</span></div>
+        <div class="kpi-body">
+          <div class="kpi-val">{{ getDB()?.status ? (getDB().status | titlecase) : '—' }}</div>
+          <div class="kpi-label">Database Status</div>
+          <div class="kpi-sub">{{ getDB()?.total ?? 0 }} active connections</div>
         </div>
-        <div class="metric-item">
-          <span class="metric-label">Database CPU:</span>
-          <span class="metric-value">{{ metricsData.current?.database?.cpu_usage || 'N/A' }}%</span>
+        <div class="kpi-stripe" [ngClass]="getStatusClass(getDB()?.status || 'unknown')"></div>
+      </div>
+
+      <!-- Connection Pool -->
+      <div class="kpi-card kpi-neutral" *ngIf="getDB() as db">
+        <div class="kpi-donut-wrap">
+          <div class="kpi-donut"
+               [style]="{'--p': db.total / db.maxConn * 100}"
+               [ngClass]="getUsageClass(db.total / db.maxConn * 100)">
+            <span class="kpi-donut-val">{{ (db.total / db.maxConn * 100) | number:'1.0-0' }}%</span>
+          </div>
         </div>
-        <div class="metric-item">
-          <span class="metric-label">Database Memory:</span>
-          <span class="metric-value">{{ metricsData.current?.database?.memory_usage || 'N/A' }}%</span>
+        <div class="kpi-body">
+          <div class="kpi-val">{{ db.active }}<span class="kpi-val-dim">/{{ db.maxConn }}</span></div>
+          <div class="kpi-label">Active / Max Conns</div>
+          <div class="kpi-sub">{{ db.idle }} idle</div>
         </div>
-        <div class="metric-item">
-          <span class="metric-label">Database Disk:</span>
-          <span class="metric-value">{{ metricsData.current?.database?.disk_usage || 'N/A' }}%</span>
+      </div>
+
+      <!-- DB Size -->
+      <div class="kpi-card kpi-neutral">
+        <div class="kpi-icon-wrap"><span class="kpi-icon">💾</span></div>
+        <div class="kpi-body">
+          <div class="kpi-val">{{ formatBytes(getDB()?.sizeBytes) }}</div>
+          <div class="kpi-label">Database Size</div>
+          <div class="kpi-sub">monitoring_db</div>
         </div>
-        <div class="metric-item">
-          <span class="metric-label">System CPU:</span>
-          <span class="metric-value">{{ metricsData.current?.system?.cpu_usage || 'N/A' }}%</span>
+      </div>
+
+      <!-- Stack Services -->
+      <div class="kpi-card"
+           [ngClass]="getConnectedStackCount() === stack.length ? 'kpi-ok' : getConnectedStackCount() === 0 ? 'kpi-err' : 'kpi-warn'">
+        <div class="kpi-icon-wrap"><span class="kpi-icon">🔗</span></div>
+        <div class="kpi-body">
+          <div class="kpi-val">{{ getConnectedStackCount() }}<span class="kpi-val-dim">/{{ stack.length }}</span></div>
+          <div class="kpi-label">Services Connected</div>
+          <div class="kpi-sub kpi-services">
+            <span *ngFor="let t of stack" class="svc-dot"
+                  [ngClass]="getStackStatus(t.depKey) === 'healthy' ? 'svc-ok' : 'svc-off'"
+                  [title]="t.name">●</span>
+          </div>
         </div>
-        <div class="metric-item">
-          <span class="metric-label">System Memory:</span>
-          <span class="metric-value">{{ metricsData.current?.system?.memory_usage || 'N/A' }}%</span>
+        <div class="kpi-stripe"
+             [ngClass]="getConnectedStackCount() === stack.length ? 'st-ok' : getConnectedStackCount() === 0 ? 'st-err' : 'st-warn'"></div>
+      </div>
+
+    </div>
+
+    <!-- ── Main Grid: DB + System ─────────────────────────────────────────── -->
+    <div class="main-grid">
+
+      <!-- DB Performance card -->
+      <div class="card db-card">
+        <div class="card-hd">
+          <div class="card-hd-left">
+            <h2>&#128268; Database Performance</h2>
+            <span class="status-badge" [ngClass]="getStatusClass(getDB()?.status || 'unknown')" *ngIf="getDB() as db">
+              {{ db.status | titlecase }}
+            </span>
+          </div>
+          <span class="card-ts" *ngIf="monitoringStatus">every {{ monitoringStatus.interval_seconds }}s</span>
         </div>
-        <div class="metric-item">
-          <span class="metric-label">System Disk:</span>
-          <span class="metric-value">{{ metricsData.current?.system?.disk_usage || 'N/A' }}%</span>
+
+        <ng-container *ngIf="getDB() as db">
+          <!-- Stacked connection bar -->
+          <div class="conn-visual">
+            <div class="conn-track">
+              <div class="conn-seg cseg-active" [style.width.%]="(db.active / db.maxConn) * 100"></div>
+              <div class="conn-seg cseg-idle"   [style.width.%]="(db.idle   / db.maxConn) * 100"></div>
+            </div>
+            <div class="conn-legend">
+              <span class="cleg"><span class="cleg-dot cseg-active"></span>Active ({{ db.active }})</span>
+              <span class="cleg"><span class="cleg-dot cseg-idle"></span>Idle ({{ db.idle }})</span>
+              <span class="cleg cleg-muted">Max {{ db.maxConn }}</span>
+            </div>
+          </div>
+
+          <!-- Pool usage bar -->
+          <div class="metric-row" style="margin-top:1.1rem">
+            <div class="mr-label">
+              <span>Pool usage</span>
+              <span class="mr-sub">{{ db.total }}/{{ db.maxConn }}</span>
+            </div>
+            <div class="mr-bar-wrap">
+              <div class="mr-bar">
+                <div class="mr-fill" [ngClass]="getUsageClass((db.total/db.maxConn)*100)" [style.width.%]="(db.total/db.maxConn)*100"></div>
+              </div>
+              <span class="mr-val" [ngClass]="getUsageClass((db.total/db.maxConn)*100).replace('bar-','txt-')">
+                {{ (db.total/db.maxConn*100) | number:'1.0-0' }}%
+              </span>
+            </div>
+          </div>
+
+          <!-- Footer stats -->
+          <div class="db-footer">
+            <div class="dbf-item" *ngIf="db.sizeBytes">
+              <span class="dbf-label">Size</span>
+              <strong>{{ formatBytes(db.sizeBytes) }}</strong>
+            </div>
+            <div class="dbf-item">
+              <span class="dbf-label">Total conn.</span>
+              <strong>{{ db.total }}</strong>
+            </div>
+            <div class="dbf-item">
+              <span class="dbf-label">Last check</span>
+              <strong>{{ monitoringStatus?.last_check | date:'HH:mm:ss' }}</strong>
+            </div>
+          </div>
+        </ng-container>
+
+        <div class="empty-card" *ngIf="!getDB()">
+          <span>⚠</span><p>Database metrics unavailable</p>
         </div>
-        <div class="metric-item">
-          <span class="metric-label">Active Connections:</span>
-          <span class="metric-value">{{ metricsData.current?.system?.connections || 'N/A' }}</span>
+      </div>
+
+      <!-- System Health card -->
+      <div class="card sys-card" *ngIf="getSys() as sys">
+        <div class="card-hd">
+          <div class="card-hd-left">
+            <h2>&#128736; System Health</h2>
+            <span class="health-badge" [ngClass]="getHealthScore().cls">{{ getHealthScore().label }}</span>
+          </div>
         </div>
+
+        <div class="gauges-row">
+          <!-- CPU -->
+          <div class="gauge-item">
+            <div class="gauge-ring" [style.--p]="sys.cpu" [ngClass]="getGaugeClass(sys.cpu)">
+              <span class="gauge-val">{{ sys.cpu | number:'1.0-0' }}%</span>
+            </div>
+            <span class="gauge-label">CPU</span>
+            <span class="gauge-sub">{{ sys.cores }} cores</span>
+          </div>
+
+          <!-- Memory -->
+          <div class="gauge-item">
+            <div class="gauge-ring" [style.--p]="sys.mem" [ngClass]="getGaugeClass(sys.mem, 80, 90)">
+              <span class="gauge-val">{{ sys.mem | number:'1.0-0' }}%</span>
+            </div>
+            <span class="gauge-label">Memory</span>
+            <span class="gauge-sub" *ngIf="sys.memTotalGB">{{ sys.memTotalGB }} GB</span>
+          </div>
+
+          <!-- Disk -->
+          <div class="gauge-item">
+            <div class="gauge-ring" [style.--p]="sys.disk" [ngClass]="getGaugeClass(sys.disk, 80, 90)">
+              <span class="gauge-val">{{ sys.disk | number:'1.0-0' }}%</span>
+            </div>
+            <span class="gauge-label">Disk</span>
+            <span class="gauge-sub" *ngIf="sys.diskUsedGB">{{ sys.diskUsedGB }} GB used</span>
+          </div>
+        </div>
+
+        <!-- Network -->
+        <div class="net-row" *ngIf="sys.netSent || sys.netRecv">
+          <div class="net-item">
+            <span class="net-arrow net-up">↑</span>
+            <div>
+              <span class="net-label">Sent</span>
+              <strong>{{ formatNetBytes(sys.netSent) }}</strong>
+            </div>
+          </div>
+          <div class="net-item">
+            <span class="net-arrow net-dn">↓</span>
+            <div>
+              <span class="net-label">Received</span>
+              <strong>{{ formatNetBytes(sys.netRecv) }}</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- System unavailable -->
+      <div class="card sys-card" *ngIf="!getSys()">
+        <div class="card-hd"><h2>&#128736; System Health</h2></div>
+        <div class="empty-card">
+          <span>📊</span>
+          <p>System metrics unavailable</p>
+          <small>Backend not returning system data</small>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ── Observability Stack ───────────────────────────────────────────── -->
+    <div class="section-hd">
+      <h3>&#128064; Observability Stack</h3>
+      <span class="section-sub">{{ getConnectedStackCount() }}/{{ stack.length }} connected</span>
+    </div>
+    <div class="stack-row">
+      <div class="stack-card" *ngFor="let tool of stack" [ngClass]="'stack-' + getStackStatus(tool.depKey)">
+
+        <!-- Header -->
+        <div class="stack-top">
+          <span class="stack-icon" [innerHTML]="tool.icon"></span>
+          <div class="stack-info">
+            <strong>{{ tool.name }}</strong>
+            <span>{{ tool.desc }}</span>
+          </div>
+          <div class="stack-status-dot" [ngClass]="getStackStatus(tool.depKey)"></div>
+        </div>
+
+        <!-- Badge -->
+        <div class="stack-badge-row">
+          <span class="stack-badge"
+            [ngClass]="getStackStatus(tool.depKey) === 'healthy'       ? 'sb-ok'   :
+                       getStackStatus(tool.depKey) === 'not_reachable'  ? 'sb-err'  :
+                       getStackStatus(tool.depKey) === 'unhealthy'      ? 'sb-warn' : 'sb-muted'">
+            {{ getStackStatus(tool.depKey) === 'healthy'       ? '● Connected'     :
+               getStackStatus(tool.depKey) === 'not_reachable' ? '● Unreachable'   :
+               getStackStatus(tool.depKey) === 'unhealthy'     ? '◑ Starting…'     : '○ Not configured' }}
+          </span>
+          <span class="stack-err-inline" *ngIf="tool.depKey && depsData?.[tool.depKey!]?.error">
+            {{ depsData[tool.depKey!].error }}
+          </span>
+        </div>
+
+        <!-- PromQL queries (Prometheus only, shown when healthy) -->
+        <div class="pql-section" *ngIf="tool.queries && getStackStatus(tool.depKey) === 'healthy'">
+          <button class="pql-toggle" (click)="expandedQueries = !expandedQueries">
+            <span>Sample PromQL queries</span>
+            <span class="pql-chevron" [class.open]="expandedQueries">&#8250;</span>
+          </button>
+          <div class="pql-list" [class.pql-open]="expandedQueries">
+            <div class="pql-item" *ngFor="let q of tool.queries">
+              <div class="pql-row">
+                <span class="pql-label">{{ q.label }}</span>
+                <button class="copy-btn" (click)="copyToClipboard(q.expr)" [class.copied]="copiedExpr === q.expr">
+                  {{ copiedExpr === q.expr ? '✓ Copied' : 'Copy' }}
+                </button>
+              </div>
+              <a [href]="'http://localhost:9090/graph?g0.expr=' + encodeURIComponent(q.expr)"
+                 target="_blank" class="pql-expr">{{ q.expr }}</a>
+            </div>
+          </div>
+        </div>
+
+        <!-- Open link — always visible when a depKey is set (service is part of our stack) -->
+        <a *ngIf="tool.depKey" [href]="tool.openUrl" target="_blank" class="stack-open-btn"
+           [class.btn-starting]="getStackStatus(tool.depKey) !== 'healthy'">
+          Open {{ tool.name }} &#8599;
+        </a>
+
+        <!-- Docker hint — only when truly not in the stack (no depKey) -->
+        <div class="stack-setup" *ngIf="!tool.depKey">
+          <span class="setup-label">Start with Docker Compose:</span>
+          <code class="setup-cmd">docker compose up {{ tool.id }} -d</code>
+        </div>
+
       </div>
     </div>
 
-    <!-- Quick Actions -->
-    <div class="card actions-card">
-      <h2>Quick Actions</h2>
-      <div class="action-buttons">
-        <button class="action-btn" routerLink="/dashboard">
-          View Dashboard
-        </button>
-        <button class="action-btn" routerLink="/recovery">
-          Recovery Operations
-        </button>
-        <button class="action-btn" routerLink="/settings">
-          Settings
-        </button>
-      </div>
-    </div>
-  </div>
+  </ng-container>
 </div>
