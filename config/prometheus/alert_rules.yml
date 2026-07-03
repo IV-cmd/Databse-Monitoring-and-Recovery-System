@@ -1,0 +1,76 @@
+groups:
+  - name: postgres_alerts
+    rules:
+      - alert: PostgreSQLDown
+        expr: up{job="postgres-exporter"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL is down"
+          description: "PostgreSQL instance {{ $labels.instance }} has been down for more than 30 seconds"
+
+      - alert: PostgreSQLTooManyConnections
+        expr: pg_stat_database_numbackends{datname="monitoring_db"} > 80
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Too many connections to PostgreSQL"
+          description: "PostgreSQL has {{ $value }} connections (> 80)"
+
+      - alert: PostgreSQLSlowQueries
+        expr: rate(pg_stat_database_calls_total{datname="monitoring_db"}[5m]) < 10
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL slow queries detected"
+          description: "Query rate is {{ $value }} queries/sec (< 10)"
+
+      - alert: PostgreSQLReplicationLag
+        expr: pg_replication_lag{instance="postgres-replica"} > 10
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL replication lag"
+          description: "Replication lag is {{ $value }} seconds (> 10)"
+
+      - alert: PostgreSQLHighCPU
+        expr: rate(process_cpu_seconds_total{job="postgres-exporter"}[5m]) > 0.8
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL high CPU usage"
+          description: "CPU usage is {{ $value }} (> 80%)"
+
+      - alert: PostgreSQLHighMemory
+        expr: (process_resident_memory_bytes{job="postgres-exporter"} / 1024 / 1024) > 1024
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL high memory usage"
+          description: "Memory usage is {{ $value }}MB (> 1GB)"
+
+  - name: monitor_service_alerts
+    rules:
+      - alert: MonitorServiceDown
+        expr: up{job="monitor-service"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Monitor service is down"
+          description: "Monitor service has been down for more than 30 seconds"
+
+      - alert: AutoRecoveryTriggered
+        expr: increase(auto_recovery_actions_total[5m]) > 0
+        for: 0s
+        labels:
+          severity: info
+        annotations:
+          summary: "Auto recovery action triggered"
+          description: "{{ $value }} auto recovery actions in the last 5 minutes"
