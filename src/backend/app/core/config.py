@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     # Observability stack URLs (localhost for local dev; override in Docker env)
     PROMETHEUS_URL: str = Field(default="http://localhost:9090")
     GRAFANA_URL: str = Field(default="http://localhost:3000")
+    KIBANA_URL: str = Field(default="http://localhost:5602")
+    LOGSTASH_HOST: str = Field(default="")
+    LOGSTASH_PORT: int = Field(default=5010)
     
     # Recovery Authentication
     RECOVERY_AUTH_REQUIRED: bool = Field(default=False)
