@@ -127,6 +127,10 @@ services:
       - DATABASE_URL=postgresql://admin:admin123@postgres-primary:5432/monitoring_db
       - REPLICA_URL=postgresql://admin:admin123@postgres-replica:5432/monitoring_db
       - PROMETHEUS_URL=http://prometheus:9090
+      - GRAFANA_URL=http://grafana:3000
+      - KIBANA_URL=http://kibana:5601
+      - LOGSTASH_HOST=logstash
+      - LOGSTASH_PORT=5010
       - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
       - LOG_LEVEL=INFO
     ports:
@@ -142,6 +146,66 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+
+  # Elasticsearch — host port 9201 to avoid conflict with dbcostops (9200)
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
+    container_name: cern-db-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - xpack.security.http.ssl.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    volumes:
+      - ./config/elk/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    ports:
+      - "9201:9200"
+    networks:
+      - monitoring
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  # Logstash — receives JSON logs from the FastAPI backend on TCP 5010
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.13.0
+    container_name: cern-db-logstash
+    volumes:
+      - ./config/elk/logstash/logstash.yml:/usr/share/logstash/config/logstash.yml:ro
+      - ./config/elk/logstash/pipeline:/usr/share/logstash/pipeline:ro
+    ports:
+      - "5010:5010"
+    environment:
+      - LS_JAVA_OPTS=-Xms256m -Xmx256m
+    networks:
+      - monitoring
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
+  # Kibana — host port 5602 to avoid conflict with dbcostops (5601)
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.13.0
+    container_name: cern-db-kibana
+    volumes:
+      - ./config/elk/kibana.yml:/usr/share/kibana/config/kibana.yml:ro
+    ports:
+      - "5602:5601"
+    networks:
+      - monitoring
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:5601/api/status || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
 
   # React Frontend
   frontend:
@@ -164,6 +228,7 @@ volumes:
   prometheus_data:
   grafana_data:
   alertmanager_data:
+  elasticsearch_data:
 
 networks:
   monitoring:
