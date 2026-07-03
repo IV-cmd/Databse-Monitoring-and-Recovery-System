@@ -322,9 +322,28 @@ async def check_dependencies():
     except Exception as e:
         dependencies["grafana"] = {"status": "not_reachable", "error": str(e)}
 
+    # Check Kibana
+    kibana_url = getattr(settings, 'KIBANA_URL', 'http://localhost:5602')
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            response = await client.get(f"{kibana_url}/api/status")
+            is_healthy = response.status_code == 200
+            body = response.json()
+            overall = body.get("status", {}).get("overall", {}).get("level", "unknown")
+            dependencies["kibana"] = {
+                "status": "healthy" if is_healthy and overall != "critical" else "unhealthy",
+                "response_time_ms": response.elapsed.total_seconds() * 1000,
+                "kibana_status": overall,
+            }
+    except Exception as e:
+        dependencies["kibana"] = {"status": "not_reachable", "error": str(e)}
+
     dependencies["authentication_summary"] = {
         "postgresql_ssl_enabled": settings.DB_SSL_ENABLED,
         "postgresql_ssl_verify": settings.DB_SSL_VERIFY,
     }
+
+    statuses = {k: v.get("status") for k, v in dependencies.items() if isinstance(v, dict) and "status" in v}
+    logger.info("dependency health check", extra={"event": "health_check", "statuses": statuses})
 
     return dependencies
