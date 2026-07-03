@@ -13,9 +13,12 @@ from app.repositories.data_repo import DataRepository
 from app.core.database import DatabaseManager, get_database
 
 
+_data_repository: DataRepository = DataRepository()
+
+
 def get_data_repository() -> DataRepository:
-    """Get unified data repository instance."""
-    return DataRepository()
+    """Get unified data repository instance (singleton)."""
+    return _data_repository
 
 
 async def get_database_repository() -> DatabaseRepository:
