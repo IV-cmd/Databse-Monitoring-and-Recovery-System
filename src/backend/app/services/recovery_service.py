@@ -61,6 +61,28 @@ class RecoveryService:
         
         return None
     
+    async def update_recovery_status(
+        self,
+        recovery_id: str,
+        status: str,
+        end_time: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+        error: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Update the status of an existing recovery record."""
+        records = await self.data_repo.get_latest(DataType.RECOVERY, limit=1000)
+        for record in records:
+            if record["data"].get("id") == recovery_id:
+                record["data"]["status"] = status
+                if end_time:
+                    record["data"]["end_time"] = end_time
+                if details:
+                    record["data"]["details"] = details
+                if error:
+                    record["data"]["error"] = error
+                return record["data"]
+        return None
+
     async def get_recovery_history(
         self, 
         limit: int = 50,
