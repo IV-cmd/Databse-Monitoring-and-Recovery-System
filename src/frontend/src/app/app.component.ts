@@ -7,7 +7,6 @@ import { AppState } from './store';
 import { HeaderComponent } from './shared/components/header/header.component';
 import { SidebarComponent } from './shared/components/sidebar/sidebar.component';
 import { ErrorModalComponent } from './shared/components/error-modal/error-modal.component';
-import { LoadingComponent } from './shared/components/loading/loading.component';
 
 @Component({
   selector: 'app-root',
@@ -18,7 +17,6 @@ import { LoadingComponent } from './shared/components/loading/loading.component'
     HeaderComponent,
     SidebarComponent,
     ErrorModalComponent,
-    LoadingComponent
   ],
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss']
