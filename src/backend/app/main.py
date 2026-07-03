@@ -27,6 +27,17 @@ app.add_middleware(
 
 app.include_router(api_router, prefix="/api/v1")
 
+
+@app.on_event("startup")
+async def on_startup():
+    logger.info("monitor-service started", extra={"event": "startup", "version": "1.0.0"})
+
+
+@app.on_event("shutdown")
+async def on_shutdown():
+    logger.info("monitor-service stopping", extra={"event": "shutdown"})
+
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
