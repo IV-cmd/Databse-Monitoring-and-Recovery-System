@@ -1,7 +1,7 @@
-import { inject } from '@angular/core';
+import { inject, Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, throwError } from 'rxjs';
-import { catchError, map } from 'rxjs/operators';
+import { catchError, map, tap } from 'rxjs/operators';
 
 export interface ApiResponse<T> {
   data?: T;
@@ -50,13 +50,18 @@ export interface RecoveryRequest {
 
 const API_BASE = 'http://localhost:8000/api/v1';
 
+@Injectable({ providedIn: 'root' })
 export class ApiService {
   private http = inject(HttpClient);
 
   // Health endpoints
   getHealth(): Observable<HealthResponse> {
-    console.log('🔍 ApiService: Making health check request to:', `${API_BASE}/health/`);
+    console.log('🔍 [ApiService] GET', `${API_BASE}/health/`);
     return this.http.get<HealthResponse>(`${API_BASE}/health/`).pipe(
+      tap({
+        next: (res) => console.log('📥 [ApiService] health raw response:', res),
+        error: (err) => console.error('📛 [ApiService] health raw error:', err.status, err.message, err)
+      }),
       catchError(handleError)
     );
   }
@@ -67,10 +72,20 @@ export class ApiService {
     );
   }
 
+  getHealthDependencies(): Observable<any> {
+    return this.http.get(`${API_BASE}/health/dependencies`).pipe(
+      catchError(handleError)
+    );
+  }
+
   // Metrics endpoints
   getCurrentMetrics(): Observable<MetricsResponse> {
-    console.log('📊 ApiService: Making metrics request to:', `${API_BASE}/metrics/current`);
+    console.log('� [ApiService] GET', `${API_BASE}/metrics/current`);
     return this.http.get<MetricsResponse>(`${API_BASE}/metrics/current`).pipe(
+      tap({
+        next: (res) => console.log('📥 [ApiService] metrics raw response:', res),
+        error: (err) => console.error('📛 [ApiService] metrics raw error:', err.status, err.message, err)
+      }),
       catchError(handleError)
     );
   }
@@ -152,13 +167,17 @@ export class ApiService {
 
 function handleError(error: any): Observable<never> {
   let errorMessage = 'An error occurred';
-  
+
   if (error.error instanceof ErrorEvent) {
-    errorMessage = `Error: ${error.error.message}`;
+    errorMessage = `Network error: ${error.error.message}`;
   } else {
-    errorMessage = `Error Code: ${error.status}\nMessage: ${error.message}`;
+    errorMessage = `HTTP ${error.status}: ${error.message}`;
   }
-  
-  console.error('API Error:', errorMessage, error);
+
+  console.error('🔥 [ApiService] handleError fired —', errorMessage);
+  console.error('   status:', error.status);
+  console.error('   statusText:', error.statusText);
+  console.error('   url:', error.url);
+  console.error('   full error object:', error);
   return throwError(() => errorMessage);
 }
