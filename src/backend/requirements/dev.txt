@@ -8,8 +8,9 @@ bandit==1.7.5
 safety==2.3.5
 
 # Documentation
-mkdocs==1.5.3
-mkdocs-material==9.4.8
+mkdocs==1.6.1
+mkdocs-material==9.7.7
+pymdown-extensions==11.0.1
 
 # Performance profiling
 py-spy==0.3.14
